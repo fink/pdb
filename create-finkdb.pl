@@ -54,7 +54,7 @@ use File::stat;
 use POSIX qw(strftime);
 use Time::HiRes qw(usleep);
 use Data::Dumper;
-use IO::Handle;
+use IO::File;
 use XML::Writer;
 
 use Encode;
@@ -65,13 +65,14 @@ $Data::Dumper::Deepcopy = 1;
 
 use vars qw(
 	$debug
+	$infodir
+	$tempdir
 	$trace
 	$wanthelp
 
 	$csv
 	$iconv
 	$last_updated
-	$temppath
 
 	$releases
 );
@@ -80,13 +81,15 @@ $csv          = Text::CSV_PP->new({ binary => 1 });
 $debug        = 0;
 $trace        = 0;
 $iconv        = Text::Iconv->new("UTF-8", "UTF-8");
-$temppath     = $topdir . '/work';
+$tempdir      = $topdir . '/work';
+$infodir      = $tempdir . '/infofiles';
 $last_updated = time;
 
 # process command-line
 GetOptions(
 	'help'       => \$wanthelp,
-	'temppath=s' => \$temppath,
+	'infodir=s'  => \$infodir,
+	'tempdir=s' => \$tempdir,
 	'debug'      => \$debug,
 	'trace'      => \$trace,
 ) or &die_with_usage;
@@ -137,10 +140,10 @@ print Dumper($releases), "\n" if ($trace);
 
 for my $release (sort keys %$releases)
 {
-	next unless ($release->{'issupported'});
+	next unless ($releases->{$release}->{'isactive'});
 
 	print "- checking out $release\n";
-	check_out_release($releases->{$release});
+	#check_out_release($releases->{$release});
 
 	print "- indexing $release\n";
 	index_release_to_xml($releases->{$release});
@@ -152,14 +155,8 @@ sub check_out_release {
 	my $release = shift;
 	my $release_id = $release->{'id'};
 
-	my $tag = 'release_' . $release->{'version'};
-	$tag =~ s/\./_/gs;
-	if ($tag eq "release_current")
-	{
-		$tag = 'HEAD';
-	}
-
-	my $checkoutroot = $temppath . '/' . $release_id . '/fink';
+	my $tag = get_tag_name($release->{'version'});
+	my $checkoutroot = get_basepath($release) . '/fink';
 	my $workingdir   = $checkoutroot;
 
 	my @command = (
@@ -280,6 +277,17 @@ sub index_release_to_xml {
 		$usage =~ s/[\r\n\s]+$//s;
 		#$usage =~ s/\n/\\n/g;
 	
+		my $parent = undef;
+		if ($vo->has_parent())
+		{
+			$parent = {
+				name     => $vo->get_parent()->get_name(),
+				version  => $vo->get_parent()->get_version(),
+				revision => $vo->get_parent()->get_revision(),
+				epoch    => $vo->get_parent()->get_epoch(),
+			}
+		}
+
 		my $package_info = {
 			name            => $vo->get_name(),
 			version         => $vo->get_version(),
@@ -292,8 +300,10 @@ sub index_release_to_xml {
 			license         => $vo->get_license(),
 			homepage        => $vo->param_default("Homepage", ""),
 			section         => $vo->get_section(),
-			parentname      => $vo->has_parent()? $vo->get_parent()->get_name():undef,
+			parent          => package_id($parent),
 			infofile        => $infofile,
+			rcspath         => $release->{'distribution'}->{'rcspath'} . '/' . $infofile,
+			tag             => get_tag_name($release->{'version'}),
 			infofilechanged => $infofilechanged,
 			last_updated    => $last_updated,
 		};
@@ -303,15 +313,59 @@ sub index_release_to_xml {
 			$package_info->{$key} = encode_utf8($package_info->{$key}) if (defined $package_info->{$key});
 		}
 
-		print "  - found package ", package_id($package_info), "\n" if ($debug);
+		print "  - ", package_id($package_info), "\n" if ($debug);
+
+		my $infopath = get_infopath($release);
+		mkpath($infopath);
+
+		my $outputfile = $infopath . '/' . package_id($package_info) . '.xml';
+		my $output = IO::File->new('>' . $outputfile);
+
+		my $writer = XML::Writer->new(OUTPUT => $output);
+
+		$writer->startTag("infofile", "version" => $fink_version);
+
+		$writer->startTag("id");
+		$writer->characters(package_id($package_info));
+		$writer->endTag("id");
+
+		for my $key (keys %$package_info)
+		{
+			$writer->startTag($key);
+			$writer->characters($package_info->{$key}) if (exists $package_info->{$key} and defined $package_info->{$key});
+			$writer->endTag($key);
+		}
+
+		$writer->endTag("infofile");
+		$writer->end();
 	}
+}
+
+# get the name of a CVS tag given the version
+sub get_tag_name {
+	my $release_version = shift;
+
+	my $tag = 'release_' . $release_version;
+	$tag =~ s/\./_/gs;
+	if ($tag eq "release_current")
+	{
+		$tag = 'HEAD';
+	}
+
+	return $tag;
+}
+
+# get the info file path for a given release
+sub get_infopath {
+	my $release = shift;
+	return $infodir . '/' . $release->{'id'};
 }
 
 # get the basepath for a given release
 sub get_basepath {
 	my $release = shift;
 
-	return $temppath . '/' . $release->{'id'};
+	return $tempdir . '/basepath/' . $release->{'id'};
 }
 
 # run a command in a work directory
