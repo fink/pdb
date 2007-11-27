@@ -74,7 +74,6 @@ use vars qw(
 
 	$csv
 	$iconv
-	$last_updated
 
 	$releases
 );
@@ -85,7 +84,6 @@ $trace        = 0;
 $iconv        = Text::Iconv->new("UTF-8", "UTF-8");
 $tempdir      = $topdir . '/work';
 $xmldir       = $tempdir . '/xml';
-$last_updated = time;
 
 # process command-line
 GetOptions(
@@ -253,7 +251,8 @@ sub index_release_to_xml {
 		$infofile = $vo->get_info_filename();
 		if ($infofile) {
 			my $sb = stat($infofile);
-			$infofilechanged = strftime "%Y-%m-%d %H:%M:%S", localtime $sb->mtime;
+			#$infofilechanged = strftime "%Y-%m-%d %H:%M:%S", localtime $sb->mtime;
+			$infofilechanged = strftime "%Y-%m-%dT%H:%M:%SZ", localtime $sb->mtime;
 			$infofile =~ s,$basepath/fink/dists/,,;
 		}
 		
@@ -292,27 +291,36 @@ sub index_release_to_xml {
 		}
 
 		my $package_info = {
-			name            => $vo->get_name(),
-			version         => $vo->get_version(),
-			revision        => $vo->get_revision(),
-			epoch           => $vo->get_epoch(),
-			descshort       => $vo->get_shortdescription(),
-			desclong        => $desc,
-			descusage       => $usage,
-			maintainer      => $maintainer,
-			license         => $vo->get_license(),
-			homepage        => $vo->param_default("Homepage", ""),
-			section         => $vo->get_section(),
-			parentname      => package_id($parent),
-			infofile        => $infofile,
-			rcspath         => $release->{'distribution'}->{'rcspath'} . '/' . $infofile,
-			tag             => get_tag_name($release->{'version'}),
-			infofilechanged => $infofilechanged,
-			last_updated    => $last_updated,
-			dist_id         => $release->{'distribution'}->{'id'},
-			rel_id          => $release->{'id'},
+			name              => $vo->get_name(),
+			version           => $vo->get_version(),
+			revision          => $vo->get_revision(),
+			epoch             => $vo->get_epoch(),
+			descshort         => $vo->get_shortdescription(),
+			desclong          => $desc,
+			descusage         => $usage,
+			maintainer        => $maintainer,
+			license           => $vo->get_license(),
+			homepage          => $vo->param_default("Homepage", ""),
+			section           => $vo->get_section(),
+			parentname        => package_id($parent),
+			infofile          => $infofile,
+			rcspath           => $release->{'distribution'}->{'rcspath'} . '/' . $infofile,
+			tag               => get_tag_name($release->{'version'}),
+			infofilechanged   => $infofilechanged,
+			dist_id           => $release->{'distribution'}->{'id'},
+			dist_name         => $release->{'distribution'}->{'name'},
+			dist_architecture => $release->{'distribution'}->{'architecture'},
+			dist_description  => $release->{'distribution'}->{'description'},
+			dist_active       => $release->{'distribution'}->{'isactive'}? 'true':'false',
+			dist_visible      => $release->{'distribution'}->{'isvisible'}? 'true':'false',
+			dist_supported    => $release->{'distribution'}->{'issupported'}? 'true':'false',
+			rel_id            => $release->{'id'},
+			rel_type          => $release->{'type'},
+			rel_version       => $release->{'version'},
+			rel_priority      => $release->{'priority'},
+			rel_active        => $release->{'isactive'}? 'true':'false',
 		};
-	
+
 		for my $key (keys %$package_info) {
 			#$package_info->{$key} =~ s/(\x{ca}|\x{a8}|\x{e96261})/ /gs if (defined $package_info->{$key});
 			$package_info->{$key} = encode_utf8($package_info->{$key}) if (defined $package_info->{$key});
@@ -328,20 +336,44 @@ sub index_release_to_xml {
 
 		my $writer = XML::Writer->new(OUTPUT => $output);
 
-		$writer->startTag("infofile", "version" => $fink_version);
+		# alternate schema, solr
+		$writer->startTag("add");
+		$writer->startTag("doc");
 
-		$writer->startTag("id");
+		$writer->startTag("field", "name" => "pkg_id");
 		$writer->characters(package_id($package_info));
-		$writer->endTag("id");
+		$writer->endTag("field");
+
+		$writer->startTag("field", "name" => "doc_id");
+		$writer->characters($release->{'id'} . '/' . package_id($package_info));
+		$writer->endTag("field");
 
 		for my $key (keys %$package_info)
 		{
-			$writer->startTag($key);
-			$writer->characters($package_info->{$key}) if (exists $package_info->{$key} and defined $package_info->{$key});
-			$writer->endTag($key);
+			if (defined $package_info->{$key})
+			{
+				$writer->startTag("field", "name" => $key);
+				$writer->characters($package_info->{$key});
+				$writer->endTag("field");
+			}
 		}
 
-		$writer->endTag("infofile");
+		$writer->endTag("doc");
+		$writer->endTag("add");
+
+		# old schema, hand-made
+#		$writer->startTag("infofile", "version" => $fink_version);
+#		$writer->startTag("id");
+#		$writer->characters(package_id($package_info));
+#		$writer->endTag("id");
+#		for my $key (keys %$package_info)
+#		{
+#			$writer->startTag($key);
+#			$writer->characters($package_info->{$key}) if (exists $package_info->{$key} and defined $package_info->{$key});
+#			$writer->endTag($key);
+#		}
+#		$writer->endTag("infofile");
+
 		$writer->end();
 	}
 }
@@ -360,12 +392,26 @@ sub remove_obsolete_xml_files {
 
 				print "file = $file\n" if ($trace);
 				my $xml = XMLin($file);
-				my $infofile = $basepath . '/fink/dists/' . $xml->{'infofile'};
+				$xml = $xml->{'doc'}->{'field'};
+
+				my $package_info = {};
+
+				my $infofile = $basepath . '/fink/dists/' . $xml->{'infofile'}->{'content'} if (exists $xml->{'infofile'} and exists $xml->{'infofile'}->{'content'});
 				print "infofile = $infofile\n" if ($trace);
-				if (-f $infofile) {
-					print "- package $xml->{'name'} is still valid ($infofile)\n" if ($trace);
+				if (defined $infofile and -f $infofile) {
+					print "- package $xml->{'name'}->{'content'} is still valid ($infofile)\n" if ($trace);
 				} else {
-					print "- removing obsolete package $xml->{'name'}\n" if ($debug);
+					print "- removing obsolete package $xml->{'name'}->{'content'}\n" if ($debug);
+					system(
+						'curl', 'http://localhost:8983/solr/update', '--data-binary',
+						'<delete><query>doc_id:' . $xml->{'doc_id'}->{'content'} . '</query></delete>',
+						'-H', 'Content-type:text/xml; charset=utf-8',
+					) == 0 or die "failed to delete $xml->{'doc_id'}->{'content'}: $!";
+
+					system(
+						'curl', 'http://localhost:8983/solr/update', '--data-binary', '<commit />',
+						'-H', 'Content-type:text/xml; charset=utf-8',
+					) == 0 or die "failed to commit $xml->{'doc_id'}->{'content'}: $!";
 					unlink($file);
 				}
 			},
