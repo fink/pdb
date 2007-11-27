@@ -1,6 +1,11 @@
-<?
+#!/usr/bin/env php -q
+<?php
+
+ini_set("include_path", "php-lib");
 
 require_once 'Zend/Search/Lucene.php';
+require_once 'File_Find/Find.php';
+require_once 'releases.inc';
 
 $index = new Zend_Search_Lucene("lucene-index");
 

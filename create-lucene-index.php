@@ -36,6 +36,7 @@ if ($dh = opendir($xmlpath)) {
 
 closedir($dh);
 
+print "- optimizing index\n";
 $index->optimize();
 
 echo $index->count() . " documents indexed.\n";
@@ -96,15 +97,29 @@ function index_dir($dir) {
 	
 		$temp_package['doc_id'] = $temp_package['rel_id'] . '/' . $temp_package['pkg_id'];
 	
-		remove_document($temp_package['doc_id']);
-		add_document($temp_package);
+		$do_update = true;
+		foreach (find_document($temp_package['doc_id']) as $hit) {
+			$doc = $hit->getDocument();
+			print "  - old: " . $doc->getField('infofile') . "(" . $doc->getField('infofilechanged') . "), new: " . $temp_package['infofile'] . "(" . $temp_package['infofilechanged'] . ")\n";
+			if ($doc->getField('infofile') == $temp_package['infofile'] && $doc->getField('infofilechanged') == $temp_package['infofilechanged']) {
+				$do_update = false;
+			}
+		}
+		if ($do_update) {
+			print "  - adding " . $temp_package['doc_id'] . "\n";
+			remove_document($temp_package['doc_id']);
+			add_document($temp_package);
+		} else {
+			print "  - skipping " . $temp_package['doc_id'] . " (up-to-date)\n";
+		}
 	}
+
+	print " - committing index changes\n";
 	$index->commit();
 }
 
 function add_document($package) {
 	global $index;
-	print "- adding package " . $package['doc_id'] . "\n";
 
 	$doc = new Zend_Search_Lucene_Document();
 
@@ -148,11 +163,14 @@ function add_document($package) {
 	$index->addDocument($doc);
 }
 
+function find_document($doc_id) {
+	global $index;
+	return $index->find('doc_id:' . $doc_id);
+}
+
 function remove_document($doc_id) {
 	global $index;
-	$hits = $index->find('doc_id:' . $doc_id);
-	foreach ($hits as $hit) {
-		print "- deleting package ID $doc_id(" . $hit->id . ")\n";
+	foreach (find_document($doc_id) as $hit) {
 		$index->delete($hit->id);
 	}
 }
