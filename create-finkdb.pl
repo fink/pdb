@@ -49,6 +49,7 @@ use Fink::Services qw(&read_config &latest_version);
 use Fink::Config qw(&set_options);
 use Fink::Package;
 use Fink::Command qw(rm_f);
+use File::Find;
 use File::Path;
 use File::stat;
 use POSIX qw(strftime);
@@ -56,6 +57,7 @@ use Time::HiRes qw(usleep);
 use Data::Dumper;
 use IO::File;
 use XML::Writer;
+use XML::Simple;
 
 use Encode;
 use Text::Iconv;
@@ -143,12 +145,13 @@ for my $release (sort keys %$releases)
 	next unless ($releases->{$release}->{'isactive'});
 
 	print "- checking out $release\n";
-	#check_out_release($releases->{$release});
+	check_out_release($releases->{$release});
 
 	print "- indexing $release\n";
 	index_release_to_xml($releases->{$release});
 
-	#exit 1;
+	print "- removing obsolete $release files\n";
+	remove_obsolete_xml_files($releases->{$release});
 }
 
 sub check_out_release {
@@ -300,12 +303,14 @@ sub index_release_to_xml {
 			license         => $vo->get_license(),
 			homepage        => $vo->param_default("Homepage", ""),
 			section         => $vo->get_section(),
-			parent          => package_id($parent),
+			parentname      => package_id($parent),
 			infofile        => $infofile,
 			rcspath         => $release->{'distribution'}->{'rcspath'} . '/' . $infofile,
 			tag             => get_tag_name($release->{'version'}),
 			infofilechanged => $infofilechanged,
 			last_updated    => $last_updated,
+			dist_id         => $release->{'distribution'}->{'id'},
+			rel_id          => $release->{'id'},
 		};
 	
 		for my $key (keys %$package_info) {
@@ -339,6 +344,35 @@ sub index_release_to_xml {
 		$writer->endTag("infofile");
 		$writer->end();
 	}
+}
+
+sub remove_obsolete_xml_files {
+	my $release = shift;
+	my $release_id = $release->{'id'};
+
+	my $xmlpath = get_xmlpath($release);
+	my $basepath = get_basepath($release);
+	find(
+		{
+			wanted => sub {
+				return unless (/.xml$/);
+				my $file = $_;
+
+				print "file = $file\n" if ($trace);
+				my $xml = XMLin($file);
+				my $infofile = $basepath . '/fink/dists/' . $xml->{'infofile'};
+				print "infofile = $infofile\n" if ($trace);
+				if (-f $infofile) {
+					print "- package $xml->{'name'} is still valid ($infofile)\n" if ($trace);
+				} else {
+					print "- removing obsolete package $xml->{'name'}\n" if ($debug);
+					unlink($file);
+				}
+			},
+			no_chdir => 1,
+		},
+		$xmlpath,
+	);
 }
 
 # get the name of a CVS tag given the version
