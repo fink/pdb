@@ -100,8 +100,8 @@ function index_dir($dir) {
 		$do_update = true;
 		foreach (find_document($temp_package['doc_id']) as $hit) {
 			$doc = $hit->getDocument();
-			print "  - old: " . $doc->getField('infofile') . "(" . $doc->getField('infofilechanged') . "), new: " . $temp_package['infofile'] . "(" . $temp_package['infofilechanged'] . ")\n";
-			if ($doc->getField('infofile') == $temp_package['infofile'] && $doc->getField('infofilechanged') == $temp_package['infofilechanged']) {
+			print "  - old: " . $doc->getFieldValue('infofile') . "(" . $doc->getFieldValue('infofilechanged') . "), new: " . $temp_package['infofile'] . "(" . $temp_package['infofilechanged'] . ")\n";
+			if ($doc->getFieldValue('infofile') == $temp_package['infofile'] && $doc->getFieldValue('infofilechanged') == $temp_package['infofilechanged']) {
 				$do_update = false;
 			}
 		}
@@ -123,42 +123,43 @@ function add_document($package) {
 
 	$doc = new Zend_Search_Lucene_Document();
 
-	$doc->addField(Zend_Search_Lucene_Field::Keyword(  'doc_id',                   $package['doc_id']));
-	$doc->addField(Zend_Search_Lucene_Field::Keyword(  'pkg_id',                   $package['pkg_id']));
-	$doc->addField(Zend_Search_Lucene_Field::Keyword(  'dist_id',                  $package['dist_id']));
-	$doc->addField(Zend_Search_Lucene_Field::Keyword(  'rel_id',                   $package['rel_id']));
+	$doc->addField(Zend_Search_Lucene_Field::Keyword(   'doc_id',                   $package['doc_id']));
+	$doc->addField(Zend_Search_Lucene_Field::Keyword(   'pkg_id',                   $package['pkg_id']));
+	$doc->addField(Zend_Search_Lucene_Field::Keyword(   'dist_id',                  $package['dist_id']));
+	$doc->addField(Zend_Search_Lucene_Field::Keyword(   'rel_id',                   $package['rel_id']));
 
-	$doc->addField(Zend_Search_Lucene_Field::Text(     'name',                     $package['name']));
-	$doc->addField(Zend_Search_Lucene_Field::Keyword(  'version',                  $package['version']));
-	$doc->addField(Zend_Search_Lucene_Field::Keyword(  'revision',                 $package['revision']));
-	$doc->addField(Zend_Search_Lucene_Field::Keyword(  'epoch',                    $package['epoch']));
+	$doc->addField(Zend_Search_Lucene_Field::Keyword(   'name',                     $package['name']));
+	$doc->addField(Zend_Search_Lucene_Field::Text(      'name_text',                $package['name']));
+	$doc->addField(Zend_Search_Lucene_Field::Keyword(   'version',                  $package['version']));
+	$doc->addField(Zend_Search_Lucene_Field::Keyword(   'revision',                 $package['revision']));
+	$doc->addField(Zend_Search_Lucene_Field::Keyword(   'epoch',                    $package['epoch']));
 
-	$doc->addField(Zend_Search_Lucene_Field::Text(     'descshort',                $package['descshort']));
-	$doc->addField(Zend_Search_Lucene_Field::UnStored( 'desclong',                 $package['desclong']));
-	$doc->addField(Zend_Search_Lucene_Field::UnStored( 'descusage',                $package['descusage']));
+	$doc->addField(Zend_Search_Lucene_Field::Text(      'descshort',                $package['descshort']));
+	$doc->addField(Zend_Search_Lucene_Field::Text(      'desclong',                 $package['desclong']));
+	$doc->addField(Zend_Search_Lucene_Field::Text(      'descusage',                $package['descusage']));
 
-	$doc->addField(Zend_Search_Lucene_Field::UnStored( 'homepage',                 $package['homepage']));
-	$doc->addField(Zend_Search_Lucene_Field::UnStored( 'license',                  $package['license']));
-	$doc->addField(Zend_Search_Lucene_Field::UnStored( 'maintainer',               $package['maintainer']));
+	$doc->addField(Zend_Search_Lucene_Field::Text(      'homepage',                 $package['homepage']));
+	$doc->addField(Zend_Search_Lucene_Field::Text(      'license',                  $package['license']));
+	$doc->addField(Zend_Search_Lucene_Field::Text(      'maintainer',               $package['maintainer']));
 
-	$doc->addField(Zend_Search_Lucene_Field::Keyword(  'section',                  $package['section']));
-	$doc->addField(Zend_Search_Lucene_Field::Keyword(  'rcspath',                  $package['rcspath']));
-	$doc->addField(Zend_Search_Lucene_Field::Keyword(  'tag',                      $package['tag']));
-	$doc->addField(Zend_Search_Lucene_Field::Text(     'parentname',               $package['parentname']));
-	$doc->addField(Zend_Search_Lucene_Field::Keyword(  'infofile',                 $package['infofile']));
-	$doc->addField(Zend_Search_Lucene_Field::Keyword(  'infofilechanged',          $package['infofilechanged']));
+	$doc->addField(Zend_Search_Lucene_Field::Keyword(   'section',                  $package['section']));
+	$doc->addField(Zend_Search_Lucene_Field::Keyword(   'rcspath',                  $package['rcspath']));
+	$doc->addField(Zend_Search_Lucene_Field::Keyword(   'tag',                      $package['tag']));
+	$doc->addField(Zend_Search_Lucene_Field::Keyword(   'parentname',               $package['parentname']));
+	$doc->addField(Zend_Search_Lucene_Field::Keyword(   'infofile',                 $package['infofile']));
+	$doc->addField(Zend_Search_Lucene_Field::Keyword(   'infofilechanged',          $package['infofilechanged']));
 
-	$doc->addField(Zend_Search_Lucene_Field::Text(     'dist_name',                $package['dist_name']));
-	$doc->addField(Zend_Search_Lucene_Field::Keyword(  'dist_architecture',        $package['dist_architecture']));
-	$doc->addField(Zend_Search_Lucene_Field::UnStored( 'dist_description',         $package['dist_description']));
-	$doc->addField(Zend_Search_Lucene_Field::Keyword(  'dist_active',              $package['dist_active']));
-	$doc->addField(Zend_Search_Lucene_Field::Keyword(  'dist_visible',             $package['dist_visible']));
-	$doc->addField(Zend_Search_Lucene_Field::Keyword(  'dist_supported',           $package['dist_supported']));
+	$doc->addField(Zend_Search_Lucene_Field::Keyword(   'dist_name',                $package['dist_name']));
+	$doc->addField(Zend_Search_Lucene_Field::Keyword(   'dist_architecture',        $package['dist_architecture']));
+	$doc->addField(Zend_Search_Lucene_Field::Text(      'dist_description',         $package['dist_description']));
+	$doc->addField(Zend_Search_Lucene_Field::Keyword(   'dist_active',              $package['dist_active']));
+	$doc->addField(Zend_Search_Lucene_Field::Keyword(   'dist_visible',             $package['dist_visible']));
+	$doc->addField(Zend_Search_Lucene_Field::Keyword(   'dist_supported',           $package['dist_supported']));
 
-	$doc->addField(Zend_Search_Lucene_Field::Keyword(  'rel_type',                 $package['rel_type']));
-	$doc->addField(Zend_Search_Lucene_Field::Keyword(  'rel_version',              $package['r_version']));
-	$doc->addField(Zend_Search_Lucene_Field::Keyword(  'rel_priority',             $package['r_priority']));
-	$doc->addField(Zend_Search_Lucene_Field::Keyword(  'rel_active',               $package['r_active']));
+	$doc->addField(Zend_Search_Lucene_Field::Keyword(   'rel_type',                 $package['rel_type']));
+	$doc->addField(Zend_Search_Lucene_Field::Keyword(   'rel_version',              $package['r_version']));
+	$doc->addField(Zend_Search_Lucene_Field::Keyword(   'rel_priority',             $package['r_priority']));
+	$doc->addField(Zend_Search_Lucene_Field::Keyword(   'rel_active',               $package['r_active']));
 
 	$index->addDocument($doc);
 }
