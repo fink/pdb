@@ -65,7 +65,7 @@ $Data::Dumper::Deepcopy = 1;
 
 use vars qw(
 	$debug
-	$infodir
+	$xmldir
 	$tempdir
 	$trace
 	$wanthelp
@@ -82,14 +82,14 @@ $debug        = 0;
 $trace        = 0;
 $iconv        = Text::Iconv->new("UTF-8", "UTF-8");
 $tempdir      = $topdir . '/work';
-$infodir      = $tempdir . '/infofiles';
+$xmldir       = $tempdir . '/xml';
 $last_updated = time;
 
 # process command-line
 GetOptions(
 	'help'       => \$wanthelp,
-	'infodir=s'  => \$infodir,
-	'tempdir=s' => \$tempdir,
+	'xmldir=s'   => \$xmldir,
+	'tempdir=s'  => \$tempdir,
 	'debug'      => \$debug,
 	'trace'      => \$trace,
 ) or &die_with_usage;
@@ -315,10 +315,10 @@ sub index_release_to_xml {
 
 		print "  - ", package_id($package_info), "\n" if ($debug);
 
-		my $infopath = get_infopath($release);
-		mkpath($infopath);
+		my $xmlpath = get_xmlpath($release);
+		mkpath($xmlpath);
 
-		my $outputfile = $infopath . '/' . package_id($package_info) . '.xml';
+		my $outputfile = $xmlpath . '/' . package_id($package_info) . '.xml';
 		my $output = IO::File->new('>' . $outputfile);
 
 		my $writer = XML::Writer->new(OUTPUT => $output);
@@ -356,9 +356,9 @@ sub get_tag_name {
 }
 
 # get the info file path for a given release
-sub get_infopath {
+sub get_xmlpath {
 	my $release = shift;
-	return $infodir . '/' . $release->{'id'};
+	return $xmldir . '/' . $release->{'id'};
 }
 
 # get the basepath for a given release
