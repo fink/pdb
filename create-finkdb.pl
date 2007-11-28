@@ -143,7 +143,7 @@ for my $release (sort keys %$releases)
 	next unless ($releases->{$release}->{'isactive'});
 
 	print "- checking out $release\n";
-	#check_out_release($releases->{$release});
+	check_out_release($releases->{$release});
 
 	print "- indexing $release\n";
 	index_release_to_xml($releases->{$release});
@@ -249,6 +249,9 @@ sub index_release_to_xml {
 	
 		# get info file
 		$infofile = $vo->get_info_filename();
+
+		next if (not defined $infofile or not -f $infofile);
+
 		if ($infofile) {
 			my $sb = stat($infofile);
 			#$infofilechanged = strftime "%Y-%m-%d %H:%M:%S", localtime $sb->mtime;
@@ -412,7 +415,7 @@ sub remove_obsolete_xml_files {
 					print "- package $xml->{'name'}->{'content'} is still valid ($infofile)\n" if ($trace);
 				} else {
 					print "- removing obsolete package $xml->{'name'}->{'content'}\n" if ($debug);
-					post_to_solr('<delete><query>doc_id:' . $xml->{'doc_id'}->{'content'} . '</query></delete>');
+					post_to_solr('<delete><query>+doc_id:' . $xml->{'doc_id'}->{'content'} . '</query></delete>');
 					unlink($file);
 				}
 			},
