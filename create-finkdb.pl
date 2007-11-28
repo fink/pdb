@@ -33,7 +33,8 @@ use Text::CSV_PP;
 our $topdir;
 our $fink_version;
 
-BEGIN {
+BEGIN
+{
 	$topdir = dirname(abs_path($0));
 	chomp($fink_version = read_file($topdir . '/fink/VERSION'));
 
@@ -76,6 +77,11 @@ use vars qw(
 	$iconv
 
 	$releases
+
+	$disable_cvs
+	$disable_indexing
+	$disable_solr
+	$disable_delete
 );
 
 $csv          = Text::CSV_PP->new({ binary => 1 });
@@ -85,13 +91,23 @@ $iconv        = Text::Iconv->new("UTF-8", "UTF-8");
 $tempdir      = $topdir . '/work';
 $xmldir       = $tempdir . '/xml';
 
+$disable_cvs      = 0;
+$disable_indexing = 0;
+$disable_solr     = 0;
+$disable_delete   = 0;
+
 # process command-line
 GetOptions(
-	'help'       => \$wanthelp,
-	'xmldir=s'   => \$xmldir,
-	'tempdir=s'  => \$tempdir,
-	'debug'      => \$debug,
-	'trace'      => \$trace,
+	'help'             => \$wanthelp,
+	'xmldir=s'         => \$xmldir,
+	'tempdir=s'        => \$tempdir,
+	'verbose'          => \$debug,
+	'trace'            => \$trace,
+
+	'disable-cvs'      => \$disable_cvs,
+	'disable-indexing' => \$disable_indexing,
+	'disable-solr'     => \$disable_solr,
+	'disable-delete'   => \$disable_delete,
 ) or &die_with_usage;
 
 $debug++ if ($trace);
@@ -142,17 +158,33 @@ for my $release (sort keys %$releases)
 {
 	next unless ($releases->{$release}->{'isactive'});
 
-	print "- checking out $release\n";
-	check_out_release($releases->{$release});
+	unless ($disable_cvs)
+	{
+		print "- checking out $release\n";
+		check_out_release($releases->{$release});
+	}
 
-	print "- indexing $release\n";
-	index_release_to_xml($releases->{$release});
+	unless ($disable_indexing)
+	{
+		print "- indexing $release\n";
+		index_release_to_xml($releases->{$release});
+	}
 
-	print "- removing obsolete $release files\n";
-	remove_obsolete_xml_files($releases->{$release});
+	unless ($disable_solr)
+	{
+		print "- posting $release to solr\n";
+		post_release_to_solr($releases->{$release});
+	}
+
+	unless ($disable_delete)
+	{
+		print "- removing obsolete $release files\n";
+		remove_obsolete_xml_files($releases->{$release});
+	}
 }
 
-sub check_out_release {
+sub check_out_release
+{
 	my $release = shift;
 	my $release_id = $release->{'id'};
 
@@ -184,7 +216,8 @@ sub check_out_release {
 	run_command($workingdir, @command);
 }
 
-sub index_release_to_xml {
+sub index_release_to_xml
+{
 	my $release = shift;
 	my $release_id = $release->{'id'};
 
@@ -211,12 +244,14 @@ sub index_release_to_xml {
 	select(OLDERR); select(STDERR);
 
 	# simulate a fink.conf; there's no actual file, so don't save() it
-	my $config = Fink::Config->new_from_properties({
-		'basepath'     => $basepath,
-		'trees'        => "$tree/main $tree/crypto",
-		'distribution' => $release->{'distribution'}->{'name'},
-		'architecture' => $release->{'distribution'}->{'architecture'},
-	});
+	my $config = Fink::Config->new_from_properties(
+		{
+			'basepath'     => $basepath,
+			'trees'        => "$tree/main $tree/crypto",
+			'distribution' => $release->{'distribution'}->{'name'},
+			'architecture' => $release->{'distribution'}->{'architecture'},
+		}
+	);
 
 	# omit actual locally-installed fink if it is present
 	set_options({exclude_trees=>[qw/status virtual/]});
@@ -238,7 +273,8 @@ sub index_release_to_xml {
 	my ($maintainer, $email, $desc, $usage, $parent, $infofile, $infofilechanged);
 	my ($v, $s, $key, %data, $expand_override);
 
-	foreach $package (Fink::Package->list_packages()) {
+	foreach $package (Fink::Package->list_packages())
+	{
 		$po = Fink::Package->package_by_name($package);
 		next if $po->is_virtual();
 		$version = &latest_version($po->list_versions());
@@ -252,7 +288,8 @@ sub index_release_to_xml {
 
 		next if (not defined $infofile or not -f $infofile);
 
-		if ($infofile) {
+		if ($infofile)
+		{
 			my $sb = stat($infofile);
 			#$infofilechanged = strftime "%Y-%m-%d %H:%M:%S", localtime $sb->mtime;
 			$infofilechanged = strftime "%Y-%m-%dT%H:%M:%SZ", localtime $sb->mtime;
@@ -290,7 +327,7 @@ sub index_release_to_xml {
 				version  => $vo->get_parent()->get_version(),
 				revision => $vo->get_parent()->get_revision(),
 				epoch    => $vo->get_parent()->get_epoch(),
-			}
+			};
 		}
 
 		my $package_info = {
@@ -324,7 +361,8 @@ sub index_release_to_xml {
 			rel_active        => $release->{'isactive'}? 'true':'false',
 		};
 
-		for my $key (keys %$package_info) {
+		for my $key (keys %$package_info)
+		{
 			#$package_info->{$key} =~ s/(\x{ca}|\x{a8}|\x{e96261})/ /gs if (defined $package_info->{$key});
 			$package_info->{$key} = encode_utf8($package_info->{$key}) if (defined $package_info->{$key});
 		}
@@ -364,33 +402,36 @@ sub index_release_to_xml {
 		$writer->endTag("doc");
 		$writer->endTag("add");
 
-		#$xml .= "\n<commit />\n";
+		$writer->end();
 
 		my $output = IO::File->new('>' . $outputfile);
 		print $output $xml;
 		$output->close();
-		post_to_solr($outputfile);
-
-		# old schema, hand-made
-#		$writer->startTag("infofile", "version" => $fink_version);
-#		$writer->startTag("id");
-#		$writer->characters(package_id($package_info));
-#		$writer->endTag("id");
-#		for my $key (keys %$package_info)
-#		{
-#			$writer->startTag($key);
-#			$writer->characters($package_info->{$key}) if (exists $package_info->{$key} and defined $package_info->{$key});
-#			$writer->endTag($key);
-#		}
-#		$writer->endTag("infofile");
-
-		$writer->end();
-
-
 	}
 }
 
-sub remove_obsolete_xml_files {
+sub post_release_to_solr
+{
+	my $release = shift;
+	my $release_id = $release->{'id'};
+
+	my $xmlpath = get_xmlpath($release);
+
+	find(
+		{
+			wanted => sub {
+				return unless (/.xml$/);
+				my $file = $_;
+				post_to_solr($file);
+			},
+			no_chdir => 1,
+		},
+		$xmlpath,
+	);
+}
+
+sub remove_obsolete_xml_files
+{
 	my $release = shift;
 	my $release_id = $release->{'id'};
 
@@ -411,10 +452,11 @@ sub remove_obsolete_xml_files {
 
 				my $infofile = $basepath . '/fink/dists/' . $xml->{'infofile'}->{'content'} if (exists $xml->{'infofile'} and exists $xml->{'infofile'}->{'content'});
 				print "infofile = $infofile\n" if ($trace);
-				if (defined $infofile and -f $infofile) {
-					print "- package $xml->{'name'}->{'content'} is still valid ($infofile)\n" if ($trace);
+				if (defined $infofile and -f $infofile)
+				{
+					print "  - package $xml->{'name'}->{'content'} is still valid ($infofile)\n" if ($trace);
 				} else {
-					print "- removing obsolete package $xml->{'name'}->{'content'}\n" if ($debug);
+					# print "- removing obsolete package $xml->{'name'}->{'content'}\n" if ($debug);
 					post_to_solr('<delete><query>+doc_id:' . $xml->{'doc_id'}->{'content'} . '</query></delete>');
 					unlink($file);
 				}
@@ -426,7 +468,8 @@ sub remove_obsolete_xml_files {
 }
 
 # get the name of a CVS tag given the version
-sub get_tag_name {
+sub get_tag_name
+{
 	my $release_version = shift;
 
 	my $tag = 'release_' . $release_version;
@@ -440,20 +483,23 @@ sub get_tag_name {
 }
 
 # get the info file path for a given release
-sub get_xmlpath {
+sub get_xmlpath
+{
 	my $release = shift;
 	return $xmldir . '/' . $release->{'id'};
 }
 
 # get the basepath for a given release
-sub get_basepath {
+sub get_basepath
+{
 	my $release = shift;
 
 	return $tempdir . '/basepath/' . $release->{'id'};
 }
 
 # run a command in a work directory
-sub run_command {
+sub run_command
+{
 	my $workingdir = shift;
 	my @command = @_;
 
@@ -465,7 +511,8 @@ sub run_command {
 
 	print "  - running: @command\n" if ($debug);
 	open(RUN, "@command |") or die "unable to run @command: $!";
-	while (<RUN>) {
+	while (<RUN>)
+	{
 		print "  - " . $_ if ($trace);
 	}
 	close(RUN);
@@ -500,12 +547,14 @@ sub package_id
 }
 
 # turn two sets of array references into key => value pairs
-sub make_hash {
+sub make_hash
+{
 	my $keys   = shift;
 	my $values = shift;
 
 	my $return;
-	for my $index ( 0 .. $#$keys ) {
+	for my $index ( 0 .. $#$keys )
+	{
 		$return->{$keys->[$index]} = $values->[$index];
 		if ($values->[$index] eq "")
 		{
@@ -517,7 +566,8 @@ sub make_hash {
 }
 
 # parse a csv line
-sub parse_csv {
+sub parse_csv
+{
 	my $row = shift;
 	chomp($row);
 	if ($csv->parse($row))
@@ -529,53 +579,46 @@ sub parse_csv {
 	return [];
 }
 
-sub print_lucene_journal {
-	my $handle  = shift;
-	my $package = shift;
-
-	print $handle "# ", join('-', $package->{'rel_id'}, $package->{'epoch'}, $package->{'name'}, $package->{'version'}, $package->{'revision'}), "\n";
-	print $handle $package->{'pkg_id'}, "\n";
-}
-
-sub die_with_usage {
+sub die_with_usage
+{
     die <<EOMSG;
 Usage: $0 [options]
 
 Options:
-  --distribution
-  --release
-  --architecture
-  --lucene
-  --indexpath
-  --help
+	--help              this help
+	--verbose           verbose output
+	--trace             extremely verbose output
 
-'distribution' is the distribution identifier (e.g. '10.4' or '10.2-gcc3.3')
-'release' is either a release version (e.g. 0.6.4) for bindists or the strings
-  'unstable' or 'stable'
-'architecture' is either 'powerpc' or 'i386'
+	--tempdir=<path>    where to put temporary files
+	--xmldir=<path>     where to write the .xml files
 
-If 'lucene' is set, and an index path is provided, dump will create an
-index for a lucene search engine indexer.
+	--disable-cvs       don't check out .info files
+	--disable-indexing  don't index .info files to .xml files
+	--disable-solr      don't post updated .xml files to solr
+	--disable-delete    don't delete outdated packages
+
 EOMSG
 }
 
 
-sub post_to_solr {
+sub post_to_solr
+{
 	my $contents = shift;
 
 	my @curl = ( 'curl', 'http://localhost:8983/solr/update', '-s', '-o', '/dev/null', '-H', 'Content-type:text/xml; charset=utf-8', '--data-binary' );
 	my @command;
 
-	if (-f $contents) {
+	if (-f $contents)
+	{
 		@command = (@curl, '@' . $contents);
 	} else {
 		@command = (@curl, $contents);
 	}
 
-	print "    - posting $contents\n" if ($debug);
+	print "  - posting $contents\n" if ($debug);
 	system(@command) == 0 or die ("unable to post update ($contents) to solr: $!");
 
-	print "    - committing\n" if ($debug);
+	print "  - committing $contents\n" if ($debug);
 	system(@curl, '<commit />') == 0 or die ("unable to commit update ($contents): $!");
 }
 
