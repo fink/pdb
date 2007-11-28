@@ -246,16 +246,19 @@
 
    <field name="text"              type="text"      indexed="true"  stored="false" multiValued="true" />
    <field name="name"              type="textTight" indexed="true"  stored="true"  required="true" />
-   <field name="name_e"            type="string"    indexed="false" stored="true"  required="false" />
-   <field name="version"           type="string"    indexed="true"  stored="true"  required="true" />
-   <field name="revision"          type="string"    indexed="true"  stored="true"  required="true" />
+   <field name="name_e"            type="string"    indexed="true"  stored="true"  required="false" />
+   <field name="version"           type="text"      indexed="true"  stored="true"  required="true" />
+   <field name="version_e"         type="string"    indexed="true"  stored="true"  required="true" />
+   <field name="revision"          type="text"      indexed="true"  stored="true"  required="true" />
+   <field name="revision_e"        type="string"    indexed="true"  stored="true"  required="true" />
    <field name="epoch"             type="sint"      indexed="true"  stored="true"  required="false" />
 
    <field name="descshort"         type="text"      indexed="true"  stored="true"  required="true" />
    <field name="desclong"          type="text"      indexed="true"  stored="true"  required="false" />
    <field name="descusage"         type="text"      indexed="true"  stored="true"  required="false" />
    <field name="homepage"          type="textTight" indexed="true"  stored="true"  required="false" />
-   <field name="license"           type="string"    indexed="true"  stored="true"  required="false" />
+   <field name="license"           type="text"      indexed="true"  stored="true"  required="false" />
+   <field name="license_e"         type="string"    indexed="true"  stored="true"  required="false" />
    <field name="maintainer"        type="textTight" indexed="true"  stored="true"  required="false" />
 
    <field name="section"           type="string"    indexed="true"  stored="true"  required="false" />
@@ -279,6 +282,8 @@
 
    <!-- exact name for sorting -->
    <copyField source="name" dest="name_e" />
+   <copyField source="version" dest="version_e" />
+   <copyField source="revision" dest="revision_e" />
 
    <!-- dump everything into text for general search -->
    <copyField source="name"              dest="text" />
