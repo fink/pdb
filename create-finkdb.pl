@@ -450,20 +450,22 @@ sub remove_obsolete_xml_files
 				my $file = $_;
 
 				print "file = $file\n" if ($trace);
-				my $xml = XMLin($file);
-				$xml = $xml->{'doc'}->{'field'};
-				return unless ($xml->{'doc_id'}->{'content'});
 
-				my $package_info = {};
+				my $contents = read_file($file);
+				my ($doc_id)   = $contents =~ /<field name="doc_id">([^<]+)/;
+				my ($name)     = $contents =~ /<field name="name">([^<]+)/;
+				my ($infofile) = $contents =~ /<field name="infofile">([^<]+)/;
 
-				my $infofile = $basepath . '/fink/dists/' . $xml->{'infofile'}->{'content'} if (exists $xml->{'infofile'} and exists $xml->{'infofile'}->{'content'});
+				return unless (defined($doc_id) and defined($infofile));
+
+				my $infofile = $basepath . '/fink/dists/' . $infofile;
 				print "infofile = $infofile\n" if ($trace);
 				if (defined $infofile and -f $infofile)
 				{
-					print "  - package $xml->{'name'}->{'content'} is still valid ($infofile)\n" if ($trace);
+					print "  - package $name is still valid ($infofile)\n" if ($trace);
 				} else {
-					# print "- removing obsolete package $xml->{'name'}->{'content'}\n" if ($debug);
-					post_to_solr('<delete><query>+doc_id:' . $xml->{'doc_id'}->{'content'} . '</query></delete>');
+					# print "- removing obsolete package $name\n" if ($debug);
+					post_to_solr('<delete><query>+doc_id:' . $doc_id . '</query></delete>');
 					unlink($file);
 				}
 			},
