@@ -28,7 +28,7 @@ use warnings;
 use Cwd qw(abs_path getcwd);
 use File::Basename;
 use File::Slurp;
-use Text::CSV_PP;
+use Text::CSV_XS;
 
 our $topdir;
 our $fink_version;
@@ -45,7 +45,7 @@ BEGIN
 
 ### now load the useful modules
 
-use lib qw($topdir/fink/perlmod);
+use lib qw(fink/perlmod);
 use Fink::Services qw(&read_config &latest_version);
 use Fink::Config qw(&set_options);
 use Fink::Package;
@@ -84,7 +84,7 @@ use vars qw(
 	$disable_delete
 );
 
-$csv          = Text::CSV_PP->new({ binary => 1 });
+$csv          = Text::CSV_XS->new({ binary => 1 });
 $debug        = 0;
 $trace        = 0;
 $iconv        = Text::Iconv->new("UTF-8", "UTF-8");
