@@ -143,7 +143,7 @@ for my $release (sort keys %$releases)
 	next unless ($releases->{$release}->{'isactive'});
 
 	print "- checking out $release\n";
-	check_out_release($releases->{$release});
+	#check_out_release($releases->{$release});
 
 	print "- indexing $release\n";
 	index_release_to_xml($releases->{$release});
@@ -332,9 +332,9 @@ sub index_release_to_xml {
 		mkpath($xmlpath);
 
 		my $outputfile = $xmlpath . '/' . package_id($package_info) . '.xml';
-		my $output = IO::File->new('>' . $outputfile);
+		my $xml;
 
-		my $writer = XML::Writer->new(OUTPUT => $output);
+		my $writer = XML::Writer->new(OUTPUT => \$xml);
 
 		# alternate schema, solr
 		$writer->startTag("add");
@@ -361,6 +361,13 @@ sub index_release_to_xml {
 		$writer->endTag("doc");
 		$writer->endTag("add");
 
+		#$xml .= "\n<commit />\n";
+
+		my $output = IO::File->new('>' . $outputfile);
+		print $output $xml;
+		$output->close();
+		post_to_solr($outputfile);
+
 		# old schema, hand-made
 #		$writer->startTag("infofile", "version" => $fink_version);
 #		$writer->startTag("id");
@@ -375,6 +382,8 @@ sub index_release_to_xml {
 #		$writer->endTag("infofile");
 
 		$writer->end();
+
+
 	}
 }
 
@@ -393,6 +402,7 @@ sub remove_obsolete_xml_files {
 				print "file = $file\n" if ($trace);
 				my $xml = XMLin($file);
 				$xml = $xml->{'doc'}->{'field'};
+				return unless ($xml->{'doc_id'}->{'content'});
 
 				my $package_info = {};
 
@@ -402,16 +412,7 @@ sub remove_obsolete_xml_files {
 					print "- package $xml->{'name'}->{'content'} is still valid ($infofile)\n" if ($trace);
 				} else {
 					print "- removing obsolete package $xml->{'name'}->{'content'}\n" if ($debug);
-					system(
-						'curl', 'http://localhost:8983/solr/update', '--data-binary',
-						'<delete><query>doc_id:' . $xml->{'doc_id'}->{'content'} . '</query></delete>',
-						'-H', 'Content-type:text/xml; charset=utf-8',
-					) == 0 or die "failed to delete $xml->{'doc_id'}->{'content'}: $!";
-
-					system(
-						'curl', 'http://localhost:8983/solr/update', '--data-binary', '<commit />',
-						'-H', 'Content-type:text/xml; charset=utf-8',
-					) == 0 or die "failed to commit $xml->{'doc_id'}->{'content'}: $!";
+					post_to_solr('<delete><query>doc_id:' . $xml->{'doc_id'}->{'content'} . '</query></delete>');
 					unlink($file);
 				}
 			},
@@ -555,7 +556,24 @@ index for a lucene search engine indexer.
 EOMSG
 }
 
-exit 0;
 
+sub post_to_solr {
+	my $contents = shift;
+
+	my @curl = ( 'curl', 'http://localhost:8983/solr/update', '-s', '-o', '/dev/null', '-H', 'Content-type:text/xml; charset=utf-8', '--data-binary' );
+	my @command;
+
+	if (-f $contents) {
+		@command = (@curl, '@' . $contents);
+	} else {
+		@command = (@curl, $contents);
+	}
+
+	print "    - posting $contents\n" if ($debug);
+	system(@command) == 0 or die ("unable to post update ($contents) to solr: $!");
+
+	print "    - committing\n" if ($debug);
+	system(@curl, '<commit />') == 0 or die ("unable to commit update ($contents): $!");
+}
 
 # vim: ts=4 sw=4 noet
