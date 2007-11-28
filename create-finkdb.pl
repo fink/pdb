@@ -224,8 +224,10 @@ sub index_release_to_xml
 	my $tree = $release->{'type'};
 	$tree = 'stable' if ($tree eq 'bindist');
 	my $basepath = get_basepath($release);
+	mkpath($basepath . '/var/lib/fink');
 
 	undef $Fink::Package::packages;
+	undef $Fink::Config::config;
 
 	open(OLDOUT, ">&STDOUT");
 	open(OLDERR, ">&STDERR");
@@ -253,9 +255,18 @@ sub index_release_to_xml
 		}
 	);
 
-	# omit actual locally-installed fink if it is present
-	set_options({exclude_trees=>[qw/status virtual/]});
-	
+	my @packagefiles;
+	find(
+		{
+			wanted => sub {
+				return unless (/\.info$/);
+				push(@packagefiles, Fink::PkgVersion->pkgversions_from_info_file($File::Find::name));
+			},
+			nochdir => 1,
+		},
+		$basepath . '/fink/dists/' . $tree
+	);
+
 	# load the package database
 	Fink::Package->load_packages();
 
@@ -267,24 +278,19 @@ sub index_release_to_xml
 		open(STDERR, ">&OLDERR");
 	}
 
+	print $release->{'id'} . " trees = " . $config->param("trees"), "\n";
+
 	### loop over packages
 
-	my ($package, $po, $version, $vo);
+	my ($packageobj);
 	my ($maintainer, $email, $desc, $usage, $parent, $infofile, $infofilechanged);
 	my ($v, $s, $key, %data, $expand_override);
 
-	foreach $package (Fink::Package->list_packages())
+	#foreach $package (Fink::Package->list_packages())
+	foreach $packageobj (@packagefiles)
 	{
-		$po = Fink::Package->package_by_name($package);
-		next if $po->is_virtual();
-		$version = &latest_version($po->list_versions());
-		$vo = $po->get_version($version);
-		
-		# Skip splitoffs
-		#next if $vo->has_parent();
-	
 		# get info file
-		$infofile = $vo->get_info_filename();
+		$infofile = $packageobj->get_info_filename();
 
 		next if (not defined $infofile or not -f $infofile);
 
@@ -298,12 +304,12 @@ sub index_release_to_xml
 		
 		# gather fields
 	
-		$maintainer = $vo->param_default("Maintainer", "(not set)");
+		$maintainer = $packageobj->param_default("Maintainer", "(not set)");
 	
 		# Always show %p as '/sw'
 		$expand_override->{'p'} = '/sw';
 	
-		$desc = $vo->param_default_expanded('DescDetail', '',
+		$desc = $packageobj->param_default_expanded('DescDetail', '',
 			expand_override => $expand_override,
 			err_action => 'ignore'
 		);
@@ -311,7 +317,7 @@ sub index_release_to_xml
 		$desc =~ s/\s+$//s;
 		#$desc =~ s/\n/\\n/g;
 	 
-		$usage = $vo->param_default_expanded('DescUsage', '',
+		$usage = $packageobj->param_default_expanded('DescUsage', '',
 			expand_override => $expand_override,
 			err_action => 'ignore'
 		);
@@ -320,28 +326,28 @@ sub index_release_to_xml
 		#$usage =~ s/\n/\\n/g;
 	
 		my $parent = undef;
-		if ($vo->has_parent())
+		if ($packageobj->has_parent())
 		{
 			$parent = {
-				name     => $vo->get_parent()->get_name(),
-				version  => $vo->get_parent()->get_version(),
-				revision => $vo->get_parent()->get_revision(),
-				epoch    => $vo->get_parent()->get_epoch(),
+				name     => $packageobj->get_parent()->get_name(),
+				version  => $packageobj->get_parent()->get_version(),
+				revision => $packageobj->get_parent()->get_revision(),
+				epoch    => $packageobj->get_parent()->get_epoch(),
 			};
 		}
 
 		my $package_info = {
-			name              => $vo->get_name(),
-			version           => $vo->get_version(),
-			revision          => $vo->get_revision(),
-			epoch             => $vo->get_epoch(),
-			descshort         => $vo->get_shortdescription(),
+			name              => $packageobj->get_name(),
+			version           => $packageobj->get_version(),
+			revision          => $packageobj->get_revision(),
+			epoch             => $packageobj->get_epoch(),
+			descshort         => $packageobj->get_shortdescription(),
 			desclong          => $desc,
 			descusage         => $usage,
 			maintainer        => $maintainer,
-			license           => $vo->get_license(),
-			homepage          => $vo->param_default("Homepage", ""),
-			section           => $vo->get_section(),
+			license           => $packageobj->get_license(),
+			homepage          => $packageobj->param_default("Homepage", ""),
+			section           => $packageobj->get_section(),
 			parentname        => package_id($parent),
 			infofile          => $infofile,
 			rcspath           => $release->{'distribution'}->{'rcspath'} . '/' . $infofile,
@@ -386,7 +392,7 @@ sub index_release_to_xml
 		$writer->endTag("field");
 
 		$writer->startTag("field", "name" => "doc_id");
-		$writer->characters($release->{'id'} . '/' . package_id($package_info));
+		$writer->characters($release->{'id'} . '-' . package_id($package_info));
 		$writer->endTag("field");
 
 		for my $key (keys %$package_info)
