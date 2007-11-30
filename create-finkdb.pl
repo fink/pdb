@@ -58,7 +58,11 @@ use Time::HiRes qw(usleep);
 use Data::Dumper;
 use IO::File;
 use XML::Writer;
-use XML::Simple;
+use LWP::UserAgent;
+use HTTP::Request::Common qw(POST);
+use URI;
+use URI::QueryParam;
+use XML::DOM;
 
 use Encode;
 use Text::Iconv;
@@ -77,17 +81,21 @@ use vars qw(
 	$iconv
 
 	$releases
+	$solr_url
 
 	$disable_cvs
 	$disable_indexing
 	$disable_solr
 	$disable_delete
+
+	$ua
 );
 
 $csv          = Text::CSV_XS->new({ binary => 1 });
 $debug        = 0;
 $trace        = 0;
 $iconv        = Text::Iconv->new("UTF-8", "UTF-8");
+$solr_url     = 'http://localhost:8983/solr';
 $tempdir      = $topdir . '/work';
 $xmldir       = $tempdir . '/xml';
 
@@ -96,6 +104,8 @@ $disable_indexing = 0;
 $disable_solr     = 0;
 $disable_delete   = 0;
 
+$ua = LWP::UserAgent->new();
+
 # process command-line
 GetOptions(
 	'help'             => \$wanthelp,
@@ -103,6 +113,8 @@ GetOptions(
 	'tempdir=s'        => \$tempdir,
 	'verbose'          => \$debug,
 	'trace'            => \$trace,
+
+	'url',             => \$solr_url,
 
 	'disable-cvs'      => \$disable_cvs,
 	'disable-indexing' => \$disable_indexing,
@@ -179,7 +191,7 @@ for my $release (sort keys %$releases)
 	unless ($disable_delete)
 	{
 		print "- removing obsolete $release files\n";
-		remove_obsolete_xml_files($releases->{$release});
+		remove_obsolete_entries($releases->{$release});
 	}
 }
 
@@ -436,7 +448,7 @@ sub post_release_to_solr
 	);
 }
 
-sub remove_obsolete_xml_files
+sub remove_obsolete_entries
 {
 	my $release = shift;
 	my $release_id = $release->{'id'};
@@ -458,14 +470,13 @@ sub remove_obsolete_xml_files
 
 				return unless (defined($doc_id) and defined($infofile));
 
-				my $infofile = $basepath . '/fink/dists/' . $infofile;
-				print "infofile = $infofile\n" if ($trace);
-				if (defined $infofile and -f $infofile)
+				my $infofilename = $basepath . '/fink/dists/' . $infofile;
+				if (-f $infofilename)
 				{
 					print "  - package $name is still valid ($infofile)\n" if ($trace);
 				} else {
-					# print "- removing obsolete package $name\n" if ($debug);
-					post_to_solr('<delete><query>+doc_id:' . $doc_id . '</query></delete>');
+					print "  - package $name is obsolete ($infofile)\n" if ($debug);
+					post_to_solr('<delete><query>+doc_id:"' . $doc_id . '"</query></delete>');
 					unlink($file);
 				}
 			},
@@ -473,6 +484,21 @@ sub remove_obsolete_xml_files
 		},
 		$xmlpath,
 	);
+
+	# second pass; in theory this should never be an issue, but it's possible
+	# to have stale stuff in the index if it gets out-of-sync
+	my $packages = get_packages_from_solr( '+rel_id:' . $release_id, 'doc_id,pkg_id,infofile,name' );
+	for my $package (@{$packages})
+	{
+		my $infofilename = $basepath . '/fink/dists/' . $package->{'infofile'};
+		if (-f $infofilename)
+		{
+			print "  - package ", $package->{'name'}, " is still valid (", $package->{'infofile'}, ")\n" if ($trace);
+		} else {
+			print "  - package ", $package->{'name'}, " is obsolete (", $package->{'infofile'}, ")\n" if ($debug);
+			post_to_solr('<delete><query>+doc_id:"' . $package->{'doc_id'} . '"</query></delete>');
+		}
+	}
 }
 
 # get the name of a CVS tag given the version
@@ -587,6 +613,99 @@ sub parse_csv
 	return [];
 }
 
+
+sub post_to_solr
+{
+	my $data = shift;
+
+	my $req = HTTP::Request->new(POST => $solr_url . '/update');
+	$req->content_type('text/xml; charset=utf-8');
+
+	# post the data
+	if (-f $data)
+	{
+		$req->content(scalar read_file($data));
+	} else {
+		$req->content($data);
+	}
+
+	my $response = $ua->request($req);
+	if ($response->is_error())
+	{
+		die "failed to post update: " . $response->status_line() . "\ncontent was:\n" . $req->content;
+	}
+
+	# commit the data
+	$req->content('<commit />');
+	$response = $ua->request($req);
+	if ($response->is_error())
+	{
+		die "failed to commit update: " . $response->status_line();
+	}
+}
+
+sub get_packages_from_solr
+{
+	my $query  = shift;
+	my $fields = shift;
+
+	my $uri = URI->new($solr_url . '/select');
+	$uri->query_param( q       => $query );
+	$uri->query_param( version => '2.2' );
+	$uri->query_param( start   => 0 );
+	$uri->query_param( rows    => 100000 );
+	$uri->query_param( indent  => 'on' );
+
+	if (defined $fields)
+	{
+		$uri->query_param( fl => $fields );
+	}
+
+	my $req = HTTP::Request->new(GET => $uri);
+	my $response = $ua->request($req);
+	if ($response->is_error())
+	{
+		die "failed to get $query: " . $response->status_line();
+	}
+
+	my $parser = XML::DOM::Parser->new();
+	my $xml = $parser->parse($response->decoded_content());
+
+	my $return = [];
+
+	my $documents = $xml->getElementsByTagName("doc");
+	my $num_docs = $documents->getLength();
+	print "  - get_packages_from_solr($query) found $num_docs documents\n" if ($debug);
+	for (my $i = 0; $i < $num_docs; $i++)
+	{
+		my $package = {};
+
+		my $doc = $documents->item($i);
+		for my $field ($doc->getChildNodes())
+		{
+			my $field_name;
+			for my $attr ($field->getAttributes())
+			{
+				next unless (defined $attr);
+				if ($attr->getNamedItem("name"))
+				{
+					$field_name = $attr->getNamedItem("name")->getNodeValue();
+				}
+			}
+			for my $child ($field->getChildNodes())
+			{
+				if ($child->getNodeValue() ne "")
+				{
+					$package->{$field_name} = $child->getNodeValue();
+				}
+			}
+		}
+		push(@{$return}, $package);
+	}
+
+	return $return;
+}
+
 sub die_with_usage
 {
     die <<EOMSG;
@@ -597,6 +716,7 @@ Options:
 	--verbose           verbose output
 	--trace             extremely verbose output
 
+	--url=<path>        where SOLR's root is (default: http://localhost:8983/solr)
 	--tempdir=<path>    where to put temporary files
 	--xmldir=<path>     where to write the .xml files
 
@@ -606,28 +726,6 @@ Options:
 	--disable-delete    don't delete outdated packages
 
 EOMSG
-}
-
-
-sub post_to_solr
-{
-	my $contents = shift;
-
-	my @curl = ( 'curl', 'http://localhost:8983/solr/update', '-s', '-o', '/dev/null', '-H', 'Content-type:text/xml; charset=utf-8', '--data-binary' );
-	my @command;
-
-	if (-f $contents)
-	{
-		@command = (@curl, '@' . $contents);
-	} else {
-		@command = (@curl, $contents);
-	}
-
-	print "  - posting $contents\n" if ($debug);
-	system(@command) == 0 or die ("unable to post update ($contents) to solr: $!");
-
-	print "  - committing $contents\n" if ($debug);
-	system(@curl, '<commit />') == 0 or die ("unable to commit update ($contents): $!");
 }
 
 # vim: ts=4 sw=4 noet
