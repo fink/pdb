@@ -265,6 +265,7 @@
    <field name="rcspath"           type="textTight" indexed="true"  stored="true"  required="false" />
    <field name="tag"               type="textTight" indexed="true"  stored="true"  required="false" />
    <field name="parentname"        type="textTight" indexed="true"  stored="true"  required="false" />
+   <field name="parentname_e"      type="string"    indexed="true"  stored="true"  required="false" />
    <field name="infofile"          type="textTight" indexed="true"  stored="true"  required="false" />
    <field name="infofilechanged"   type="date"      indexed="true"  stored="true"  required="false" default="NOW" multiValued="false" />
 
@@ -272,6 +273,7 @@
    <field name="dist_architecture" type="string"    indexed="true"  stored="true"  required="true" />
    <field name="dist_description"  type="text"      indexed="true"  stored="true"  required="false" />
    <field name="dist_active"       type="boolean"   indexed="true"  stored="true"  required="false" default="true" />
+   <field name="dist_priority"     type="sint"      indexed="true"  stored="true"  required="false" default="0" />
    <field name="dist_visible"      type="boolean"   indexed="true"  stored="true"  required="false" default="true" />
    <field name="dist_supported"    type="boolean"   indexed="true"  stored="true"  required="false" default="true" />
 
@@ -284,6 +286,7 @@
    <copyField source="name" dest="name_e" />
    <copyField source="version" dest="version_e" />
    <copyField source="revision" dest="revision_e" />
+   <copyField source="parentname" dest="parentname_e" />
 
    <!-- dump everything into text for general search -->
    <copyField source="name"              dest="text" />

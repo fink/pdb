@@ -432,6 +432,9 @@
     <queryResponseWriter name="custom" class="com.example.MyResponseWriter"/>
   -->
 
+  <queryResponseWriter name="standard" class="org.apache.solr.request.XMLResponseWriter"/>
+  <queryResponseWriter name="json" class="org.apache.solr.request.JSONResponseWriter"/>
+
   <!-- XSLT response writer transforms the XML output by any xslt file found
        in Solr's conf/xslt directory.  Changes to xslt files are checked for
        every xsltCacheLifetimeSeconds.  
