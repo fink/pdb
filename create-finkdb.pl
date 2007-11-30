@@ -168,7 +168,7 @@ print Dumper($releases), "\n" if ($trace);
 
 for my $release (sort keys %$releases)
 {
-	next unless ($releases->{$release}->{'isactive'});
+	#next unless ($releases->{$release}->{'isactive'});
 
 	unless ($disable_cvs)
 	{
@@ -369,6 +369,7 @@ sub index_release_to_xml
 			dist_name         => $release->{'distribution'}->{'name'},
 			dist_architecture => $release->{'distribution'}->{'architecture'},
 			dist_description  => $release->{'distribution'}->{'description'},
+			dist_priority     => $release->{'distribution'}->{'priority'},
 			dist_active       => $release->{'distribution'}->{'isactive'}? 'true':'false',
 			dist_visible      => $release->{'distribution'}->{'isvisible'}? 'true':'false',
 			dist_supported    => $release->{'distribution'}->{'issupported'}? 'true':'false',
