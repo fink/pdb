@@ -1,7 +1,7 @@
-<?
+<?php
 $title = "Package Database - Help Needed";
 $cvs_author = '$Author: rangerrick $';
-$cvs_date = '$Date: 2007/11/16 19:36:09 $';
+$cvs_date = '$Date: 2007/11/30 22:11:04 $';
 
 $have_key = isset($maintainer);
 
@@ -37,7 +37,6 @@ Browse the full list
 </a> of packages without maintainer.
 </p>
 
-
-<?
+<?php
 include "footer.inc";
 ?>

@@ -1,5 +1,6 @@
 <?
 
+/*
 $memcache = new Memcache();
 $memcache->connect('localhost', 11211);
 
@@ -35,5 +36,6 @@ function cachedQuery($sql, $compress = 0) {
 	}
 
 }
+*/
 
 ?>
