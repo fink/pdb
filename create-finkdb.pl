@@ -36,9 +36,9 @@ our $fink_version;
 BEGIN
 {
 	$topdir = dirname(abs_path($0));
-	chomp($fink_version = read_file($topdir . '/fink/VERSION'));
+	chomp($fink_version = read_file($topdir . '/fink/VERSION', binmode => ':utf8'));
 
-	my $finkversioncontents = read_file($topdir . '/fink/perlmod/Fink/FinkVersion.pm.in');
+	my $finkversioncontents = read_file($topdir . '/fink/perlmod/Fink/FinkVersion.pm.in', binmode => ':utf8');
 	$finkversioncontents =~ s/\@VERSION\@/$fink_version/gs;
 	write_file($topdir . '/fink/perlmod/Fink/FinkVersion.pm', $finkversioncontents);
 };
@@ -76,6 +76,7 @@ use vars qw(
 	$xmldir
 	$tempdir
 	$trace
+	$start_at
 	$wanthelp
 
 	$csv
@@ -99,6 +100,7 @@ $iconv        = Text::Iconv->new("UTF-8", "UTF-8");
 $solr_url     = 'http://localhost:8983/solr';
 $tempdir      = $topdir . '/work';
 $xmldir       = $tempdir . '/xml';
+$start_at     = '';
 
 $disable_cvs      = 0;
 $disable_indexing = 0;
@@ -114,6 +116,7 @@ GetOptions(
 	'tempdir=s'        => \$tempdir,
 	'verbose'          => \$debug,
 	'trace'            => \$trace,
+	'start_at=s'       => \$start_at,
 
 	'url',             => \$solr_url,
 
@@ -173,9 +176,14 @@ if (not flock(LOCKFILE, LOCK_EX | LOCK_NB)) {
 
 print Dumper($releases), "\n" if ($trace);
 
+my $started = 0;
+$started = 1 if ($start_at eq '');
 for my $release (sort keys %$releases)
 {
-	#next unless ($releases->{$release}->{'isactive'});
+	if (not $started) {
+		next if ($release ne $start_at);
+	}
+	$started = 1;
 
 	unless ($disable_cvs)
 	{
@@ -203,7 +211,7 @@ for my $release (sort keys %$releases)
 }
 
 if (-x "/etc/init.d/memcached") {
-	system("/etc/init.d/memcached", "restart");
+	system("/usr/bin/sudo", "/etc/init.d/memcached", "restart");
 }
 
 sub check_out_release
@@ -226,7 +234,7 @@ sub check_out_release
 
 	if (-e $checkoutroot . '/dists/CVS/Repository')
 	{
-		chomp(my $repo = read_file($checkoutroot . '/dists/CVS/Repository'));
+		chomp(my $repo = read_file($checkoutroot . '/dists/CVS/Repository', binmode => ':utf8'));
 		if ($repo eq $release->{'distribution'}->{'rcspath'})
 		{
 			@command = ( 'cvs', 'update', '-r', $tag );
@@ -403,8 +411,11 @@ sub index_release_to_xml
 
 		for my $key (keys %$package_info)
 		{
-			#$package_info->{$key} =~ s/(\x{ca}|\x{a8}|\x{e96261})/ /gs if (defined $package_info->{$key});
-			$package_info->{$key} = encode_utf8($package_info->{$key}) if (defined $package_info->{$key});
+			if (defined $package_info->{$key})
+			{
+				$package_info->{$key} =~ s/[[:cntrl:]]/ /gs;
+				$package_info->{$key} = encode_utf8($package_info->{$key}) if (defined $package_info->{$key});
+			}
 		}
 
 		print "  - ", package_id($package_info), "\n" if ($debug);
@@ -422,11 +433,13 @@ sub index_release_to_xml
 		$writer->startTag("doc");
 
 		$writer->startTag("field", "name" => "pkg_id");
-		$writer->characters(package_id($package_info));
+		#$writer->characters(package_id($package_info));
+		$writer->cdata(package_id($package_info));
 		$writer->endTag("field");
 
 		$writer->startTag("field", "name" => "doc_id");
-		$writer->characters($release->{'id'} . '-' . package_id($package_info));
+		#$writer->characters($release->{'id'} . '-' . package_id($package_info));
+		$writer->cdata($release->{'id'} . '-' . package_id($package_info));
 		$writer->endTag("field");
 
 		for my $key (keys %$package_info)
@@ -434,7 +447,8 @@ sub index_release_to_xml
 			if (defined $package_info->{$key})
 			{
 				$writer->startTag("field", "name" => $key);
-				$writer->characters($package_info->{$key});
+				#$writer->characters($package_info->{$key});
+				$writer->cdata($package_info->{$key});
 				$writer->endTag("field");
 			}
 		}
@@ -444,9 +458,7 @@ sub index_release_to_xml
 
 		$writer->end();
 
-		my $output = IO::File->new('>' . $outputfile);
-		print $output $xml;
-		$output->close();
+		write_file( $outputfile, {binmode => ':utf8'}, $xml );
 	}
 }
 
@@ -486,7 +498,7 @@ sub remove_obsolete_entries
 
 				print "file = $file\n" if ($trace);
 
-				my $contents = read_file($file);
+				my $contents = read_file($file, binmode => ':utf8');
 				my ($doc_id)   = $contents =~ /<field name="doc_id">([^<]+)/;
 				my ($name)     = $contents =~ /<field name="name">([^<]+)/;
 				my ($infofile) = $contents =~ /<field name="infofile">([^<]+)/;
@@ -649,7 +661,7 @@ sub post_to_solr
 	# post the data
 	if (-f $data)
 	{
-		$req->content(scalar read_file($data));
+		$req->content(scalar read_file($data, binmode => ':utf8'));
 	} else {
 		$req->content($data);
 	}
