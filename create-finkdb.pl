@@ -195,6 +195,10 @@ for my $release (sort keys %$releases)
 	}
 }
 
+if (-x "/etc/init.d/memcached") {
+	system("/etc/init.d/memcached", "restart");
+}
+
 sub check_out_release
 {
 	my $release = shift;
