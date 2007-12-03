@@ -13,8 +13,12 @@ popd
 cd solr
 java -jar start.jar
 
-# (in another terminal) run the indexer
+# (in another terminal) run the indexer (you'll need a bunch of perl mods probably)
 ./create-finkdb.pl --verbose
+
+# get/start memcached
+fink install memcached
+/sw/sbin/memcached -d
 
 now, just point your web browser at ${pdb/web root}/pdb and... look at stuff.
 =)
