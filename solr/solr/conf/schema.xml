@@ -298,16 +298,7 @@
    <copyField source="descshort"         dest="text" />
    <copyField source="desclong"          dest="text" />
    <copyField source="descusage"         dest="text" />
-   <copyField source="homepage"          dest="text" />
-   <copyField source="license"           dest="text" />
-   <copyField source="maintainer"        dest="text" />
    <copyField source="section"           dest="text" />
-   <copyField source="tag"               dest="text" />
-   <copyField source="infofile"          dest="text" />
-   <copyField source="dist_architecture" dest="text" />
-   <copyField source="dist_description"  dest="text" />
-   <copyField source="rel_type"          dest="text" />
-   <copyField source="rel_version"       dest="text" />
 
 <!--
    <field name="id" type="string" indexed="true" stored="true" required="true" /> 
