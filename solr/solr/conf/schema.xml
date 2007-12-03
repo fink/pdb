@@ -245,7 +245,7 @@
    <field name="rel_id"            type="string"    indexed="true"  stored="true"  required="true" />
 
    <field name="text"              type="text"      indexed="true"  stored="false" multiValued="true" />
-   <field name="name"              type="textTight" indexed="true"  stored="true"  required="true" />
+   <field name="name"              type="text"      indexed="true"  stored="true"  required="true" />
    <field name="name_e"            type="string"    indexed="true"  stored="true"  required="false" />
    <field name="version"           type="text"      indexed="true"  stored="true"  required="true" />
    <field name="version_e"         type="string"    indexed="true"  stored="true"  required="true" />
@@ -256,18 +256,21 @@
    <field name="descshort"         type="text"      indexed="true"  stored="true"  required="true" />
    <field name="desclong"          type="text"      indexed="true"  stored="true"  required="false" />
    <field name="descusage"         type="text"      indexed="true"  stored="true"  required="false" />
-   <field name="homepage"          type="textTight" indexed="true"  stored="true"  required="false" />
+   <field name="homepage"          type="text"      indexed="true"  stored="true"  required="false" />
    <field name="license"           type="text"      indexed="true"  stored="true"  required="false" />
    <field name="license_e"         type="string"    indexed="true"  stored="true"  required="false" />
-   <field name="maintainer"        type="textTight" indexed="true"  stored="true"  required="false" />
+   <field name="maintainer"        type="text"      indexed="true"  stored="true"  required="false" />
 
    <field name="section"           type="string"    indexed="true"  stored="true"  required="false" />
-   <field name="rcspath"           type="textTight" indexed="true"  stored="true"  required="false" />
+   <field name="rcspath"           type="text"      indexed="true"  stored="true"  required="false" />
    <field name="tag"               type="textTight" indexed="true"  stored="true"  required="false" />
-   <field name="parentname"        type="textTight" indexed="true"  stored="true"  required="false" />
+   <field name="parentname"        type="text"      indexed="true"  stored="true"  required="false" />
    <field name="parentname_e"      type="string"    indexed="true"  stored="true"  required="false" />
-   <field name="infofile"          type="textTight" indexed="true"  stored="true"  required="false" />
+   <field name="infofile"          type="text"      indexed="true"  stored="true"  required="false" />
    <field name="infofilechanged"   type="date"      indexed="true"  stored="true"  required="false" default="NOW" multiValued="false" />
+
+	<field name="has_parent"        type="boolean"   indexed="true"  stored="true"  default="false" />
+	<field name="has_common_splitoffs" type="boolean" indexed="true" stored="true"  default="false" />
 
    <field name="dist_name"         type="string"    indexed="true"  stored="true"  required="true" />
    <field name="dist_architecture" type="string"    indexed="true"  stored="true"  required="true" />

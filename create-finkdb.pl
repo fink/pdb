@@ -132,7 +132,7 @@ $debug++ if ($trace);
 
 	print "- parsing distribution/release information\n";
 
-	open (GET_DISTRIBUTIONS, $topdir . '/php-lib/get_distributions.php |') or die "unable to run $topdir/php-lib/get_distributions.php: $!";
+	open (GET_DISTRIBUTIONS, $topdir . '/get_distributions.php |') or die "unable to run $topdir/get_distributions.php: $!";
 	my @keys = parse_csv(scalar(<GET_DISTRIBUTIONS>));
 
 	while (my $line = <GET_DISTRIBUTIONS>)
@@ -144,7 +144,7 @@ $debug++ if ($trace);
 	}
 	close(GET_DISTRIBUTIONS);
 
-	open (GET_RELEASES, $topdir . '/php-lib/get_distributions.php -r |') or die "unable to run $topdir/php-lib/get_distributions.php -r: $!";
+	open (GET_RELEASES, $topdir . '/get_distributions.php -r |') or die "unable to run $topdir/get_distributions.php -r: $!";
 	@keys = parse_csv(scalar(<GET_RELEASES>));
 
 	while (my $line = <GET_RELEASES>) 
@@ -347,6 +347,13 @@ sub index_release_to_xml
 				epoch    => $packageobj->get_parent()->get_epoch(),
 			};
 		}
+		my $has_common_splitoffs = 'false';
+		for my $splitoff ($packageobj->get_splitoffs())
+		{
+			if ($splitoff->get_name() =~ /-(shlibs|dev|bin|common|doc)$/) {
+				$has_common_splitoffs = 'true';
+			}
+		}
 
 		my $package_info = {
 			name              => $packageobj->get_name(),
@@ -378,6 +385,9 @@ sub index_release_to_xml
 			rel_version       => $release->{'version'},
 			rel_priority      => $release->{'priority'},
 			rel_active        => $release->{'isactive'}? 'true':'false',
+
+			has_parent        => defined $parent? 'true' : 'false',
+			has_common_splitoffs => $has_common_splitoffs,
 		};
 
 		for my $key (keys %$package_info)
@@ -557,7 +567,7 @@ sub run_command
 }
 
 # create a package ID from package information
-# this needs to be kept in sync with php-lib/finkinfo.inc
+# this needs to be kept in sync with web/pdb/finkinfo.inc
 sub package_id
 {
 	my $package = shift;
