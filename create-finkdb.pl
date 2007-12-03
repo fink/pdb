@@ -468,6 +468,7 @@ sub post_release_to_solr
 		},
 		$xmlpath,
 	);
+	commit_solr();
 }
 
 sub remove_obsolete_entries
@@ -506,6 +507,7 @@ sub remove_obsolete_entries
 		},
 		$xmlpath,
 	);
+	commit_solr();
 
 	# second pass; in theory this should never be an issue, but it's possible
 	# to have stale stuff in the index if it gets out-of-sync
@@ -521,6 +523,7 @@ sub remove_obsolete_entries
 			post_to_solr('<delete><query>+doc_id:"' . $package->{'doc_id'} . '"</query></delete>');
 		}
 	}
+	commit_solr();
 }
 
 # get the name of a CVS tag given the version
@@ -656,14 +659,11 @@ sub post_to_solr
 	{
 		die "failed to post update: " . $response->status_line() . "\ncontent was:\n" . $req->content;
 	}
+}
 
-	# commit the data
-	$req->content('<commit />');
-	$response = $ua->request($req);
-	if ($response->is_error())
-	{
-		die "failed to commit update: " . $response->status_line();
-	}
+sub commit_solr
+{
+	post_to_solr('<commit/>');
 }
 
 sub get_packages_from_solr
