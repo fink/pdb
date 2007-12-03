@@ -1,0 +1,20 @@
+How to set up your own pdb instance:
+
+# check out the pdb code
+cvs -d :pserver:anonymous@fink.cvs.sourceforge.net:/cvsroot/fink co pdb
+cd pdb
+
+# update to the branch (just for now)
+pushd web/pdb
+cvs up -r pdb_solr
+popd
+
+# run solr
+cd solr
+java -jar start.jar
+
+# (in another terminal) run the indexer
+./create-finkdb.pl --verbose
+
+now, just point your web browser at ${pdb/web root}/pdb and... look at stuff.
+=)
