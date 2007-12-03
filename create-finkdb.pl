@@ -46,6 +46,7 @@ BEGIN
 ### now load the useful modules
 
 use lib qw(fink/perlmod);
+use Fcntl qw(:DEFAULT :flock);
 use Fink::Services qw(&read_config &latest_version);
 use Fink::Config qw(&set_options);
 use Fink::Package;
@@ -125,6 +126,12 @@ GetOptions(
 $debug++ if ($trace);
 
 &die_with_usage if $wanthelp;
+
+mkpath($tempdir);
+open(LOCKFILE, '>>' . $tempdir . '/create-finkdb.lock') or die "could not open lockfile for append: $!";
+if (not flock(LOCKFILE, LOCK_EX | LOCK_NB)) {
+	die "Another process is running.";
+}
 
 # get the list of distributions to scan
 {
