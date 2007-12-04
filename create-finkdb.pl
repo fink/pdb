@@ -119,7 +119,7 @@ GetOptions(
 	'tempdir=s'        => \$tempdir,
 	'verbose'          => \$debug,
 	'trace'            => \$trace,
-	'pause'            => \$skip_pause,
+	'pause=i'          => \$pause,
 	'start-at=s'       => \$start_at,
 
 	'url',             => \$solr_url,
@@ -354,7 +354,7 @@ sub index_release_to_xml
 		);
 		chomp $desc;
 		$desc =~ s/\s+$//s;
-		#$desc =~ s/\n/\\n/g;
+		$desc =~ s/^(\s*)\.\s*$/$1./s;
 	 
 		$usage = $packageobj->param_default_expanded('DescUsage', '',
 			expand_override => $expand_override,
