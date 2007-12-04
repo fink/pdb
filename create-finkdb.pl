@@ -348,21 +348,19 @@ sub index_release_to_xml
 		# Always show %p as '/sw'
 		$expand_override->{'p'} = '/sw';
 	
-		$desc = $packageobj->param_default_expanded('DescDetail', '',
-			expand_override => $expand_override,
-			err_action => 'ignore'
+		$desc = filter_description(
+			$packageobj->param_default_expanded('DescDetail', '',
+				expand_override => $expand_override,
+				err_action => 'ignore'
+			)
 		);
-		chomp $desc;
-		$desc =~ s/\s+$//s;
-		$desc =~ s/^(\s*)\.\s*$/$1./s;
-	 
-		$usage = $packageobj->param_default_expanded('DescUsage', '',
-			expand_override => $expand_override,
-			err_action => 'ignore'
+
+		$usage = filter_description(
+			$packageobj->param_default_expanded('DescUsage', '',
+				expand_override => $expand_override,
+				err_action => 'ignore'
+			)
 		);
-		chomp $usage;
-		$usage =~ s/[\r\n\s]+$//s;
-		#$usage =~ s/\n/\\n/g;
 	
 		my $parent = undef;
 		if ($packageobj->has_parent())
@@ -449,6 +447,43 @@ sub index_release_to_xml
 
 		write_file( $outputfile, {binmode => ':utf8'}, $xml );
 	}
+}
+
+sub filter_description
+{
+	my $desc = shift;
+	$desc =~ s/^(\s*\r?\n)+//gs;
+	$desc =~ s/(\s*\r?\n)+$//gs;
+
+	my @desc = split(/\r?\n/, $desc);
+	my $spaces = 1000;
+	# pass 1: figure out the least amount of spaces in the formatting
+	for my $index (0..$#desc)
+	{
+		$desc[$index] =~ s/\t/        /gs;
+		$desc[$index] =~ s/^\s*\.?\s*$//;
+
+		if ($desc[$index] !~ /^\s*$/)
+		{
+			my ($whitespace) = $desc[$index] =~ /^(\s*)/;
+			next unless (defined $whitespace);
+			my $length = length($whitespace);
+			if ($length < $spaces)
+			{
+				$spaces = $length;
+			}
+		}
+	}
+	if ($spaces > 0 and $spaces < 1000)
+	{
+		# pass 2: erase the minimum amount of spaces from each line
+		for my $index (0..$#desc)
+		{
+			my $remove = " " x $spaces;
+			$desc[$index] =~ s/^$remove//;
+		}
+	}
+	return join("\n", @desc);
 }
 
 sub post_release_to_solr
