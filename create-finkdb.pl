@@ -74,11 +74,12 @@ $Data::Dumper::Deepcopy = 1;
 
 use vars qw(
 	$debug
-	$xmldir
+	$pause
+	$start_at
 	$tempdir
 	$trace
-	$start_at
 	$wanthelp
+	$xmldir
 
 	$csv
 	$iconv
@@ -98,6 +99,7 @@ $csv          = Text::CSV_XS->new({ binary => 1 });
 $debug        = 0;
 $trace        = 0;
 $iconv        = Text::Iconv->new("UTF-8", "UTF-8");
+$pause        = 60;
 $solr_url     = 'http://localhost:8983/solr';
 $tempdir      = $topdir . '/work';
 $xmldir       = $tempdir . '/xml';
@@ -117,7 +119,8 @@ GetOptions(
 	'tempdir=s'        => \$tempdir,
 	'verbose'          => \$debug,
 	'trace'            => \$trace,
-	'start_at=s'       => \$start_at,
+	'pause'            => \$skip_pause,
+	'start-at=s'       => \$start_at,
 
 	'url',             => \$solr_url,
 
@@ -190,24 +193,28 @@ for my $release (sort keys %$releases)
 	{
 		print "- checking out $release\n";
 		check_out_release($releases->{$release});
+		sleep($pause);
 	}
 
 	unless ($disable_indexing)
 	{
 		print "- indexing $release\n";
 		index_release_to_xml($releases->{$release});
+		sleep($pause);
 	}
 
 	unless ($disable_solr)
 	{
 		print "- posting $release to solr\n";
 		post_release_to_solr($releases->{$release});
+		sleep($pause);
 	}
 
 	unless ($disable_delete)
 	{
 		print "- removing obsolete $release files\n";
 		remove_obsolete_entries($releases->{$release});
+		sleep($pause);
 	}
 }
 
@@ -740,6 +747,9 @@ Options:
 	--disable-indexing  don't index .info files to .xml files
 	--disable-solr      don't post updated .xml files to solr
 	--disable-delete    don't delete outdated packages
+
+	--pause=<seconds>   pause for X seconds between phases (default: 60)
+	--start-at=<foo>    start at the given release ID
 
 EOMSG
 }
