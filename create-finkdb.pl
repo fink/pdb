@@ -75,6 +75,7 @@ $Data::Dumper::Deepcopy = 1;
 use vars qw(
 	$debug
 	$pause
+	$end_at
 	$start_at
 	$tempdir
 	$trace
@@ -104,6 +105,7 @@ $solr_url     = 'http://localhost:8983/solr';
 $tempdir      = $topdir . '/work';
 $xmldir       = $tempdir . '/xml';
 $start_at     = '';
+$end_at       = '';
 
 $disable_cvs      = 0;
 $disable_indexing = 0;
@@ -121,6 +123,7 @@ GetOptions(
 	'trace'            => \$trace,
 	'pause=i'          => \$pause,
 	'start-at=s'       => \$start_at,
+	'end-at=s'         => \$end_at,
 
 	'url',             => \$solr_url,
 
@@ -216,6 +219,8 @@ for my $release (sort keys %$releases)
 		remove_obsolete_entries($releases->{$release});
 		sleep($pause);
 	}
+
+	last if ($release eq $end_at);
 }
 
 if (-x "/etc/init.d/memcached") {
@@ -785,6 +790,7 @@ Options:
 
 	--pause=<seconds>   pause for X seconds between phases (default: 60)
 	--start-at=<foo>    start at the given release ID
+	--end-at=<foo>      end at the given release ID
 
 EOMSG
 }
