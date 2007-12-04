@@ -411,6 +411,12 @@ sub index_release_to_xml
 
 		print "  - ", package_id($package_info), "\n" if ($debug);
 
+		for my $key (keys %$package_info) {
+			next unless (defined $package_info->{$key});
+			$package_info->{$key} = encode_utf8($package_info->{$key});
+			$package_info->{$key} =~ s/\u001B/ /gs;
+		}
+
 		my $xmlpath = get_xmlpath($release);
 		mkpath($xmlpath);
 
@@ -439,7 +445,6 @@ sub index_release_to_xml
 
 		$writer->end();
 
-		$xml = encode_utf8($xml);
 		write_file( $outputfile, {binmode => ':utf8'}, $xml );
 	}
 }
