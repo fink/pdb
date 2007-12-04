@@ -29,6 +29,7 @@ use Cwd qw(abs_path getcwd);
 use File::Basename;
 use File::Slurp;
 use Text::CSV_XS;
+use utf8;
 
 our $topdir;
 our $fink_version;
@@ -411,19 +412,13 @@ sub index_release_to_xml
 
 		print "  - ", package_id($package_info), "\n" if ($debug);
 
-		for my $key (keys %$package_info) {
-			next unless (defined $package_info->{$key});
-			$package_info->{$key} = encode_utf8($package_info->{$key});
-			$package_info->{$key} =~ s/\u001B/ /gs;
-		}
-
 		my $xmlpath = get_xmlpath($release);
 		mkpath($xmlpath);
 
 		my $outputfile = $xmlpath . '/' . package_id($package_info) . '.xml';
 		my $xml;
 
-		my $writer = XML::Writer->new(OUTPUT => \$xml);
+		my $writer = XML::Writer->new(OUTPUT => \$xml, UNSAFE => 1);
 
 		# alternate schema, solr
 		$writer->startTag("add");
@@ -434,7 +429,7 @@ sub index_release_to_xml
 
 		for my $key (keys %$package_info)
 		{
-			if (defined $package_info->{$key})
+			if (exists $package_info->{$key} and defined $package_info->{$key})
 			{
 				$writer->cdataElement("field", $package_info->{$key}, "name" => $key);
 			}
