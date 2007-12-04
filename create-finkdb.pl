@@ -409,15 +409,6 @@ sub index_release_to_xml
 			has_common_splitoffs => $has_common_splitoffs,
 		};
 
-		for my $key (keys %$package_info)
-		{
-			if (defined $package_info->{$key})
-			{
-				$package_info->{$key} =~ s/[[:cntrl:]]/ /gs;
-				$package_info->{$key} = encode_utf8($package_info->{$key}) if (defined $package_info->{$key});
-			}
-		}
-
 		print "  - ", package_id($package_info), "\n" if ($debug);
 
 		my $xmlpath = get_xmlpath($release);
@@ -432,24 +423,14 @@ sub index_release_to_xml
 		$writer->startTag("add");
 		$writer->startTag("doc");
 
-		$writer->startTag("field", "name" => "pkg_id");
-		#$writer->characters(package_id($package_info));
-		$writer->cdata(package_id($package_info));
-		$writer->endTag("field");
-
-		$writer->startTag("field", "name" => "doc_id");
-		#$writer->characters($release->{'id'} . '-' . package_id($package_info));
-		$writer->cdata($release->{'id'} . '-' . package_id($package_info));
-		$writer->endTag("field");
+		$writer->cdataElement("field", package_id($package_info), "name" => "pkg_id");
+		$writer->cdataElement("field", $release->{'id'} . '-' . package_id($package_info), "name" => "doc_id");
 
 		for my $key (keys %$package_info)
 		{
 			if (defined $package_info->{$key})
 			{
-				$writer->startTag("field", "name" => $key);
-				#$writer->characters($package_info->{$key});
-				$writer->cdata($package_info->{$key});
-				$writer->endTag("field");
+				$writer->cdataElement("field", $package_info->{$key}, "name" => $key);
 			}
 		}
 
@@ -458,6 +439,7 @@ sub index_release_to_xml
 
 		$writer->end();
 
+		$xml = encode_utf8($xml);
 		write_file( $outputfile, {binmode => ':utf8'}, $xml );
 	}
 }
