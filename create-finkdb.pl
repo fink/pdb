@@ -223,10 +223,6 @@ for my $release (sort keys %$releases)
 	last if ($release eq $end_at);
 }
 
-if (-x "/etc/init.d/memcached") {
-	system("/usr/bin/sudo", "/etc/init.d/memcached", "restart");
-}
-
 sub check_out_release
 {
 	my $release = shift;
