@@ -380,6 +380,10 @@ sub index_release_to_xml
 				$has_common_splitoffs = 'true';
 			}
 		}
+		my $is_common_splitoff = 'false';
+		if ($packageobj->get_name() =~ /-(shlibs|dev|bin|common|doc)$/) {
+			$is_common_splitoff = 'true';
+		}
 
 		my $package_info = {
 			name              => $packageobj->get_name(),
@@ -412,8 +416,9 @@ sub index_release_to_xml
 			rel_priority      => $release->{'priority'},
 			rel_active        => $release->{'isactive'}? 'true':'false',
 
-			has_parent        => defined $parent? 'true' : 'false',
+			has_parent           => defined $parent? 'true' : 'false',
 			has_common_splitoffs => $has_common_splitoffs,
+			is_common_splitoff   => $is_common_splitoff,
 		};
 
 		print "  - ", package_id($package_info), "\n" if ($debug);

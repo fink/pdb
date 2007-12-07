@@ -271,6 +271,7 @@
 
 	<field name="has_parent"        type="boolean"   indexed="true"  stored="true"  default="false" />
 	<field name="has_common_splitoffs" type="boolean" indexed="true" stored="true"  default="false" />
+	<field name="is_common_splitoff" type="boolean"  indexed="true"  stored="true"  default="false" />
 
    <field name="dist_name"         type="string"    indexed="true"  stored="true"  required="true" />
    <field name="dist_architecture" type="string"    indexed="true"  stored="true"  required="true" />
