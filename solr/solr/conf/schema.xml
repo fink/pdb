@@ -261,6 +261,9 @@
    <field name="license_e"         type="string"    indexed="true"  stored="true"  required="false" />
    <field name="maintainer"        type="text"      indexed="true"  stored="true"  required="false" />
 
+   <field name="depends"           type="text"      indexed="true"  stored="false" required="false" />
+   <field name="builddepends"      type="text"      indexed="true"  stored="false" required="false" />
+
    <field name="section"           type="string"    indexed="true"  stored="true"  required="false" />
    <field name="rcspath"           type="text"      indexed="true"  stored="true"  required="false" />
    <field name="tag"               type="textTight" indexed="true"  stored="true"  required="false" />

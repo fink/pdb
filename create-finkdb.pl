@@ -385,6 +385,21 @@ sub index_release_to_xml
 			$is_common_splitoff = 'true';
 		}
 
+		my (@depends, @builddepends);
+		my ($depends, $builddepends) = ("", "");
+		for my $entry (@{$packageobj->get_depends(0, 0)}) {
+			for my $value (@{$entry}) {
+				$value =~ s/\s*\([^\)]+\)\s*$//;
+				push(@depends, $value);
+			}
+		}
+		for my $entry (@{$packageobj->get_depends(1, 0)}) {
+			for my $value (@{$entry}) {
+				$value =~ s/\s*\([^\)]+\)\s*$//;
+				push(@builddepends, $value);
+			}
+		}
+
 		my $package_info = {
 			name              => $packageobj->get_name(),
 			version           => $packageobj->get_version(),
@@ -394,6 +409,8 @@ sub index_release_to_xml
 			desclong          => $desc,
 			descusage         => $usage,
 			maintainer        => $maintainer,
+			depends           => join(' ', sort(@depends)),
+			builddepends      => join(' ', sort(@builddepends)),
 			license           => $packageobj->get_license(),
 			homepage          => $packageobj->param_default("Homepage", ""),
 			section           => $packageobj->get_section(),
