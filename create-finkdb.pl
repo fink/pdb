@@ -400,8 +400,27 @@ sub index_release_to_xml
 			}
 		}
 
+		my $sort_value = 0;
+		{
+			my $numeric_version = $packageobj->get_version();
+			$numeric_version =~ s/[^0-9\.]//gs;
+			my $multiplier = 1;
+			for my $field (reverse(split(/\./, $numeric_version)))
+			{
+				$field = sprintf("%04d", $field);
+				$sort_value += ($field * $multiplier);
+				$multiplier *= 10000;
+			}
+
+			my $numeric_revision = $packageobj->get_revision();
+			$numeric_revision =~ s/[^0-9]//gs;
+			$numeric_revision =~ s/^.*(....)$/$1/ if (length($numeric_revision) > 4);
+			$sort_value .= sprintf("%04d", $numeric_revision);
+		}
+
 		my $package_info = {
 			name              => $packageobj->get_name(),
+			sort_version      => $sort_value,
 			version           => $packageobj->get_version(),
 			revision          => $packageobj->get_revision(),
 			epoch             => $packageobj->get_epoch(),

@@ -249,6 +249,7 @@
    <field name="name_e"            type="string"    indexed="true"  stored="true"  required="false" />
    <field name="version"           type="text"      indexed="true"  stored="true"  required="true" />
    <field name="version_e"         type="string"    indexed="true"  stored="true"  required="true" />
+   <field name="sort_version"      type="slong"     indexed="true"  stored="true"  required="false" />
    <field name="revision"          type="text"      indexed="true"  stored="true"  required="true" />
    <field name="revision_e"        type="string"    indexed="true"  stored="true"  required="true" />
    <field name="epoch"             type="sint"      indexed="true"  stored="true"  required="false" />
