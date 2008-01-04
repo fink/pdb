@@ -10,16 +10,16 @@ if [ -x "/usr/bin/ionice" ]; then
 fi
 
 for dist in \
-	10.3-powerpc-current-stable \
-	10.3-powerpc-current-unstable \
-	10.4-powerpc-current-stable \
-	10.4-powerpc-current-unstable \
-	10.4-i386-current-stable \
-	10.4-i386-current-unstable \
-	10.5-powerpc-current-stable \
-	10.5-powerpc-current-unstable \
-	10.5-i386-current-stable \
 	10.5-i386-current-unstable \
+	10.5-i386-current-stable \
+	10.5-powerpc-current-unstable \
+	10.5-powerpc-current-stable \
+	10.4-i386-current-unstable \
+	10.4-i386-current-stable \
+	10.4-powerpc-current-unstable \
+	10.4-powerpc-current-stable \
+	10.3-powerpc-current-unstable \
+	10.3-powerpc-current-stable \
 	; do
 	$COMMAND --start-at $dist --end-at $dist "$@"
 done

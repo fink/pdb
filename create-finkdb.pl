@@ -185,7 +185,7 @@ print Dumper($releases), "\n" if ($trace);
 
 my $started = 0;
 $started = 1 if ($start_at eq '');
-for my $release (sort keys %$releases)
+for my $release (reverse sort keys %$releases)
 {
 	if (not $started) {
 		next if ($release ne $start_at);
