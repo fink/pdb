@@ -28,6 +28,7 @@ use warnings;
 use Cwd qw(abs_path getcwd);
 use File::Basename;
 use File::Slurp;
+use Math::BigInt;
 use Text::CSV_XS;
 use utf8;
 
@@ -400,17 +401,21 @@ sub index_release_to_xml
 			}
 		}
 
-		my $sort_value = 0;
+		my $sort_value = Math::BigInt->bzero();
 		{
 			my $numeric_version = $packageobj->get_version();
 			$numeric_version =~ s/[^0-9\.]//gs;
 			my $multiplier = 1;
 			for my $field (reverse(split(/\./, $numeric_version)))
 			{
-				$field = sprintf("%04d", $field);
-				$sort_value += ($field * $multiplier);
+				my $value = Math::BigInt->bzero();
+				$value->badd($field);
+				$value->bmul($multiplier);
+				$sort_value->badd($value);
 				$multiplier *= 10000;
 			}
+
+			$sort_value = $sort_value->bstr();
 
 			my $numeric_revision = $packageobj->get_revision();
 			$numeric_revision =~ s/[^0-9]//gs;
