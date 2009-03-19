@@ -151,10 +151,6 @@ $debug++ if ($trace);
 
 &die_with_usage if $wanthelp;
 
-if ($clear_db) {
-	delete_all();
-}
-
 mkpath($tempdir);
 open(LOCKFILE, '>>' . $tempdir . '/create-finkdb.lock') or die "could not open lockfile for append: $!";
 if (not flock(LOCKFILE, LOCK_EX | LOCK_NB)) {
@@ -220,6 +216,11 @@ for my $release (reverse sort keys %$releases)
 		sleep($pause);
 	}
 
+	if ($clear_db)
+	{
+		delete_release($releases->{$release});
+	}
+
 	unless ($disable_indexing)
 	{
 		print "- indexing $release\n";
@@ -247,9 +248,9 @@ for my $release (reverse sort keys %$releases)
 	} else {
 		print "- $release != $end_at\n" if ($trace);
 	}
+	commit_solr();
 }
 
-commit_solr();
 optimize_solr();
 
 sub check_out_release
@@ -802,6 +803,12 @@ sub post_to_solr
 sub delete_all
 {
 	post_to_solr('<delete><query>*:*</query></delete>') || die "unable to run delete query";
+}
+
+sub delete_release
+{
+	my $release = shift;
+	post_to_solr("<delete><query>+rel_id:$release</query></delete>") || die "unable to run delete query for $release";
 }
 
 sub optimize_solr
