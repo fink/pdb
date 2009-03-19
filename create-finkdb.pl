@@ -89,6 +89,7 @@ use vars qw(
 	$releases
 	$solr_url
 
+	$clear_db
 	$disable_cvs
 	$disable_indexing
 	$disable_solr
@@ -108,6 +109,7 @@ $xmldir       = $tempdir . '/xml';
 $start_at     = '';
 $end_at       = '';
 
+$clear_db         = 0;
 $disable_cvs      = 0;
 $disable_indexing = 0;
 $disable_solr     = 0;
@@ -126,8 +128,9 @@ GetOptions(
 	'start-at=s'       => \$start_at,
 	'end-at=s'         => \$end_at,
 
-	'url',             => \$solr_url,
+	'url=s',           => \$solr_url,
 
+	'clear-db'         => \$clear_db,
 	'disable-cvs'      => \$disable_cvs,
 	'disable-indexing' => \$disable_indexing,
 	'disable-solr'     => \$disable_solr,
@@ -137,6 +140,10 @@ GetOptions(
 $debug++ if ($trace);
 
 &die_with_usage if $wanthelp;
+
+if ($clear_db) {
+	post_to_solr('<delete><query>*:*</query></delete>');
+}
 
 mkpath($tempdir);
 open(LOCKFILE, '>>' . $tempdir . '/create-finkdb.lock') or die "could not open lockfile for append: $!";
@@ -214,7 +221,7 @@ for my $release (reverse sort keys %$releases)
 		sleep($pause);
 	}
 
-	unless ($disable_delete)
+	unless ($disable_delete or $clear_db)
 	{
 		print "- removing obsolete $release files\n";
 		remove_obsolete_entries($releases->{$release});
@@ -223,6 +230,8 @@ for my $release (reverse sort keys %$releases)
 
 	last if ($release eq $end_at);
 }
+
+commit_solr();
 
 sub check_out_release
 {
@@ -551,7 +560,6 @@ sub post_release_to_solr
 		},
 		$xmlpath,
 	);
-	commit_solr();
 }
 
 sub remove_obsolete_entries
@@ -590,7 +598,6 @@ sub remove_obsolete_entries
 		},
 		$xmlpath,
 	);
-	commit_solr();
 
 	# second pass; in theory this should never be an issue, but it's possible
 	# to have stale stuff in the index if it gets out-of-sync
@@ -606,7 +613,6 @@ sub remove_obsolete_entries
 			post_to_solr('<delete><query>+doc_id:"' . $package->{'doc_id'} . '"</query></delete>');
 		}
 	}
-	commit_solr();
 }
 
 # get the name of a CVS tag given the version
