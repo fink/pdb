@@ -156,10 +156,6 @@ if ($clear_db) {
 }
 
 mkpath($tempdir);
-if (-d $xmldir) {
-	rmtree($xmldir);
-}
-
 open(LOCKFILE, '>>' . $tempdir . '/create-finkdb.lock') or die "could not open lockfile for append: $!";
 if (not flock(LOCKFILE, LOCK_EX | LOCK_NB)) {
 	die "Another process is running.";
@@ -301,6 +297,12 @@ sub index_release
 	$tree = 'stable' if ($tree eq 'bindist');
 	my $basepath = get_basepath($release);
 	mkpath($basepath . '/var/lib/fink');
+
+	my $xmlpath = get_xmlpath($release);
+	if (-d $xmlpath) {
+		rmtree($xmlpath);
+	}
+	mkpath($xmlpath);
 
 	undef $Fink::Package::packages;
 	undef $Fink::Config::config;
@@ -506,9 +508,6 @@ sub index_release
 			$solr->add( { $doc_id => $package_info } );
 			return;
 		}
-
-		my $xmlpath = get_xmlpath($release);
-		mkpath($xmlpath);
 
 		my $outputfile = $xmlpath . '/' . package_id($package_info) . '.xml';
 		my $xml;
