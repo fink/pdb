@@ -31,6 +31,7 @@ use File::Slurp;
 use Math::BigInt;
 use Text::CSV_XS;
 use utf8;
+use Solr;
 
 our $topdir;
 our $fink_version;
@@ -88,6 +89,7 @@ use vars qw(
 
 	$releases
 	$solr_url
+	$solr
 
 	$clear_db
 	$disable_cvs
@@ -114,6 +116,14 @@ $disable_cvs      = 0;
 $disable_indexing = 0;
 $disable_solr     = 0;
 $disable_delete   = 0;
+
+mkpath($tempdir . '/logs');
+$solr = Solr->new(
+	schema  => 'solr/solr/conf/schema.xml',
+	port    => '8983',
+	url     => 'http://localhost:8983/solr',
+	log_dir => $tempdir . '/logs',
+);
 
 $ua = LWP::UserAgent->new();
 
@@ -142,10 +152,14 @@ $debug++ if ($trace);
 &die_with_usage if $wanthelp;
 
 if ($clear_db) {
-	post_to_solr('<delete><query>*:*</query></delete>');
+	delete_all();
 }
 
 mkpath($tempdir);
+if (-d $xmldir) {
+	rmtree($xmldir);
+}
+
 open(LOCKFILE, '>>' . $tempdir . '/create-finkdb.lock') or die "could not open lockfile for append: $!";
 if (not flock(LOCKFILE, LOCK_EX | LOCK_NB)) {
 	die "Another process is running.";
@@ -196,7 +210,10 @@ $started = 1 if ($start_at eq '');
 for my $release (reverse sort keys %$releases)
 {
 	if (not $started) {
-		next if ($release ne $start_at);
+		if ($release ne $start_at) {
+			print "- $release != $start_at\n" if ($trace);
+			next;
+		}
 	}
 	$started = 1;
 
@@ -210,7 +227,7 @@ for my $release (reverse sort keys %$releases)
 	unless ($disable_indexing)
 	{
 		print "- indexing $release\n";
-		index_release_to_xml($releases->{$release});
+		index_release($releases->{$release}, 0);
 		sleep($pause);
 	}
 
@@ -228,7 +245,12 @@ for my $release (reverse sort keys %$releases)
 		sleep($pause);
 	}
 
-	last if ($release eq $end_at);
+	if ($release eq $end_at) {
+		print "- $release = $end_at\n" if ($trace);
+		last;
+	} else {
+		print "- $release != $end_at\n" if ($trace);
+	}
 }
 
 commit_solr();
@@ -244,8 +266,10 @@ sub check_out_release
 
 	my @command = (
 		'cvs',
+		'-q',
 		'-d', ':pserver:anonymous@fink.cvs.sourceforge.net:/cvsroot/fink',
 		'checkout',
+		'-PA',
 		'-r', $tag,
 		'-d', 'dists',
 		$release->{'distribution'}->{'rcspath'}
@@ -256,7 +280,7 @@ sub check_out_release
 		chomp(my $repo = read_file($checkoutroot . '/dists/CVS/Repository', binmode => ':utf8'));
 		if ($repo eq $release->{'distribution'}->{'rcspath'})
 		{
-			@command = ( 'cvs', 'update', '-r', $tag );
+			@command = ( 'cvs', '-q', 'update', '-Pd', '-r', $tag );
 			$workingdir = $checkoutroot . '/dists';
 		} else {
 			rmtree($checkoutroot . '/dists');
@@ -266,9 +290,10 @@ sub check_out_release
 	run_command($workingdir, @command);
 }
 
-sub index_release_to_xml
+sub index_release
 {
 	my $release = shift;
+	my $post_immediately = shift || 0;
 	my $release_id = $release->{'id'};
 
 	my $tree = $release->{'type'};
@@ -473,6 +498,14 @@ sub index_release_to_xml
 
 		print "  - ", package_id($package_info), "\n" if ($debug);
 
+		my $pkg_id = package_id($package_info);
+		my $doc_id = $release->{'id'} . '-' . $pkg_id;
+
+		if ($post_immediately) {
+			$solr->add( { $doc_id => $package_info } );
+			return;
+		}
+
 		my $xmlpath = get_xmlpath($release);
 		mkpath($xmlpath);
 
@@ -485,8 +518,8 @@ sub index_release_to_xml
 		$writer->startTag("add");
 		$writer->startTag("doc");
 
-		$writer->cdataElement("field", package_id($package_info), "name" => "pkg_id");
-		$writer->cdataElement("field", $release->{'id'} . '-' . package_id($package_info), "name" => "doc_id");
+		$writer->cdataElement("field", $pkg_id, "name" => "pkg_id");
+		$writer->cdataElement("field", $doc_id, "name" => "doc_id");
 
 		for my $key (keys %$package_info)
 		{
@@ -554,7 +587,7 @@ sub post_release_to_solr
 			wanted => sub {
 				return unless (/.xml$/);
 				my $file = $_;
-				post_to_solr($file);
+				do_post($file);
 			},
 			no_chdir => 1,
 		},
@@ -590,7 +623,7 @@ sub remove_obsolete_entries
 					print "  - package $name is still valid ($infofile)\n" if ($trace);
 				} else {
 					print "  - package $name is obsolete ($infofile)\n" if ($debug);
-					post_to_solr('<delete><query>+doc_id:"' . $doc_id . '"</query></delete>');
+					do_post('<delete><query>+doc_id:"' . $doc_id . '"</query></delete>');
 					unlink($file);
 				}
 			},
@@ -610,7 +643,7 @@ sub remove_obsolete_entries
 			print "  - package ", $package->{'name'}, " is still valid (", $package->{'infofile'}, ")\n" if ($trace);
 		} else {
 			print "  - package ", $package->{'name'}, " is obsolete (", $package->{'infofile'}, ")\n" if ($debug);
-			post_to_solr('<delete><query>+doc_id:"' . $package->{'doc_id'} . '"</query></delete>');
+			do_post('<delete><query>+doc_id:"' . $package->{'doc_id'} . '"</query></delete>');
 		}
 	}
 }
@@ -728,6 +761,20 @@ sub parse_csv
 }
 
 
+sub do_post
+{
+	my $data = shift;
+	my $retries = 3;
+	my $retval;
+	while ($retries-- > 0) {
+		$retval = post_to_solr($data);
+		if ($retval) {
+			return 1
+		}
+	}
+	die "failed to post after retries";
+}
+
 sub post_to_solr
 {
 	my $data = shift;
@@ -746,13 +793,20 @@ sub post_to_solr
 	my $response = $ua->request($req);
 	if ($response->is_error())
 	{
-		die "failed to post update: " . $response->status_line() . "\ncontent was:\n" . $req->content;
+		print "failed to post update: " . $response->status_line() . "\n\nresponse content was:\n" . $response->content . "\n\nrequest content was:\n" . $req->content;
+		return 0;
 	}
+	return 1;
+}
+
+sub delete_all
+{
+	post_to_solr('<delete><query>*:*</query></delete>') || die "unable to run delete query";
 }
 
 sub commit_solr
 {
-	post_to_solr('<commit/>');
+	post_to_solr('<commit/>') || die "unable to commit";
 }
 
 sub get_packages_from_solr
