@@ -891,6 +891,7 @@ Options:
 	--tempdir=<path>    where to put temporary files
 	--xmldir=<path>     where to write the .xml files
 
+	--clear-db          delete existing index before doing anything
 	--disable-cvs       don't check out .info files
 	--disable-indexing  don't index .info files to .xml files
 	--disable-solr      don't post updated .xml files to solr
