@@ -254,6 +254,7 @@ for my $release (reverse sort keys %$releases)
 }
 
 commit_solr();
+optimize_solr();
 
 sub check_out_release
 {
@@ -802,6 +803,11 @@ sub post_to_solr
 sub delete_all
 {
 	post_to_solr('<delete><query>*:*</query></delete>') || die "unable to run delete query";
+}
+
+sub optimize_solr
+{
+	post_to_solr('<optimize/>') || die "unable to optimize";
 }
 
 sub commit_solr
