@@ -808,7 +808,7 @@ sub delete_all
 sub delete_release
 {
 	my $release = shift;
-	post_to_solr("<delete><query>+rel_id:$release</query></delete>") || die "unable to run delete query for $release";
+	post_to_solr("<delete><query>+rel_id:$release->{'id'}</query></delete>") || die "unable to run delete query for $release";
 }
 
 sub optimize_solr
