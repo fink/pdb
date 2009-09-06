@@ -208,6 +208,9 @@ unless ($disable_solr) {
 		if ($p->cmndline =~ /fink.temporary.solr/) {
 			info("- stopping old temporary solr(" . $p->pid . "): " . $p->cmndline);
 			$p->kill(15);
+
+			debug("  - waiting a few seconds for it to shut down");
+			sleep(5);
 		}
 	}
 
@@ -217,6 +220,9 @@ unless ($disable_solr) {
 	info("- starting temporary solr instance\n");
 	$ENV{'SOLR_OPTS'} = "-Dfink.temporary.solr=1 -Djetty.port=$solr_temp_port";
 	system($solr_temp_path . '/start.sh') == 0 or die "unable to start solr on port $solr_temp_port: $?";
+
+	debug("  - waiting a few seconds for it to come up");
+	sleep(5);
 }
 
 my $started = 0;
@@ -283,6 +289,8 @@ unless ($disable_solr) {
 		if ($p->cmndline =~ /fink.temporary.solr/) {
 			info("- stopping temporary solr(" . $p->pid . "): " . $p->cmndline);
 			$p->kill(15);
+			debug("  - waiting a few seconds for it to shut down");
+			sleep(5);
 		}
 	}
 
@@ -291,6 +299,8 @@ unless ($disable_solr) {
 		if ($p->cmndline =~ /solr\/start.jar/) {
 			info("- stopping production solr(" . $p->pid . "): " . $p->cmndline . "\n");
 			$p->kill(15);
+			debug("  - waiting a few seconds for it to shut down");
+			sleep(5);
 		}
 	}
 
