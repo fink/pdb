@@ -109,7 +109,7 @@ $trace          = 0;
 $iconv          = Text::Iconv->new("UTF-8", "UTF-8");
 $pause          = 10;
 $solr_temp_port = 1234;
-$solr_url       = "http://localhost:$solr_temp_port/solr";
+$solr_url       = "http://127.0.0.1:$solr_temp_port/solr";
 $tempdir        = $topdir . '/work';
 $xmldir         = $tempdir . '/xml';
 $start_at       = '';
@@ -954,7 +954,7 @@ Options:
 	--verbose           verbose output
 	--trace             extremely verbose output
 
-	--url=<path>        where SOLR's root is (default: http://localhost:8983/solr)
+	--url=<path>        where SOLR's root is (default: http://127.0.0.1:1234/solr)
 	--tempdir=<path>    where to put temporary files
 	--xmldir=<path>     where to write the .xml files
 
