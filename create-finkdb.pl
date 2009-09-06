@@ -29,9 +29,10 @@ use Cwd qw(abs_path getcwd);
 use File::Basename;
 use File::Slurp;
 use Math::BigInt;
+use Proc::ProcessTable;
+use Solr;
 use Text::CSV_XS;
 use utf8;
-use Solr;
 
 our $topdir;
 our $fink_version;
@@ -88,6 +89,8 @@ use vars qw(
 	$iconv
 
 	$releases
+	$solr_temp_port
+	$solr_temp_path
 	$solr_url
 	$solr
 
@@ -100,18 +103,20 @@ use vars qw(
 	$ua
 );
 
-$csv          = Text::CSV_XS->new({ binary => 1 });
-$debug        = 0;
-$trace        = 0;
-$iconv        = Text::Iconv->new("UTF-8", "UTF-8");
-$pause        = 60;
-$solr_url     = 'http://localhost:8983/solr';
-$tempdir      = $topdir . '/work';
-$xmldir       = $tempdir . '/xml';
-$start_at     = '';
-$end_at       = '';
+$csv            = Text::CSV_XS->new({ binary => 1 });
+$debug          = 0;
+$trace          = 0;
+$iconv          = Text::Iconv->new("UTF-8", "UTF-8");
+$pause          = 10;
+$solr_temp_port = 1234;
+$solr_url       = "http://localhost:$solr_temp_port/solr";
+$tempdir        = $topdir . '/work';
+$xmldir         = $tempdir . '/xml';
+$start_at       = '';
+$end_at         = '';
+$solr_temp_path = $tempdir . '/solr';
 
-$clear_db         = 0;
+$clear_db         = 1;
 $disable_cvs      = 0;
 $disable_indexing = 0;
 $disable_solr     = 0;
@@ -120,8 +125,8 @@ $disable_delete   = 0;
 mkpath($tempdir . '/logs');
 $solr = Solr->new(
 	schema  => 'solr/solr/conf/schema.xml',
-	port    => '8983',
-	url     => 'http://localhost:8983/solr',
+	port    => $solr_temp_port,
+	url     => $solr_url,
 	log_dir => $tempdir . '/logs',
 );
 
@@ -197,6 +202,23 @@ if (not flock(LOCKFILE, LOCK_EX | LOCK_NB)) {
 
 print Dumper($releases), "\n" if ($trace);
 
+unless ($disable_solr) {
+	my $proc = Proc::ProcessTable->new(enable_ttys => 0);
+	for my $p (@{$proc->table}) {
+		if ($p->cmndline =~ /fink.temporary.solr/) {
+			print "- stopping old temporary solr(" . $p->pid . "): " . $p->cmndline . "\n";
+			$p->kill(15);
+		}
+	}
+
+	print "- syncing temporary solr instance\n";
+	system('rsync', '-ar', '--exclude=*.log', '--exclude=work', '--exclude=index', '--exclude=CVS', '--delete-excluded', 'solr/', $solr_temp_path . '/') == 0 or die "unable to run rsync: $?";
+
+	print "- starting temporary solr instance\n";
+	$ENV{'SOLR_OPTS'} = "-Dfink.temporary.solr=1 -Djetty.port=$solr_temp_port";
+	system($solr_temp_path . '/start.sh') == 0 or die "unable to start solr on port $solr_temp_port: $?";
+}
+
 my $started = 0;
 $started = 1 if ($start_at eq '');
 for my $release (reverse sort keys %$releases)
@@ -252,6 +274,35 @@ for my $release (reverse sort keys %$releases)
 }
 
 optimize_solr();
+
+unless ($disable_solr) {
+	my $proc = Proc::ProcessTable->new(enable_ttys => 0);
+
+	# first, kill the newly-indexed Solr
+	for my $p (@{$proc->table}) {
+		if ($p->cmndline =~ /fink.temporary.solr/) {
+			print "- stopping temporary solr(" . $p->pid . "): " . $p->cmndline . "\n";
+			$p->kill(15);
+		}
+	}
+
+	# next, kill the production Solr
+	for my $p (@{$proc->table}) {
+		if ($p->cmndline =~ /solr\/start.jar/) {
+			print "- stopping production solr(" . $p->pid . "): " . $p->cmndline . "\n";
+			$p->kill(15);
+		}
+	}
+
+	# copy the new indexes to the production instance
+	print "- syncing indexes\n";
+	system('rsync', '-ar', $solr_temp_path . '/solr/data/', 'solr/solr/data/') == 0 or die "unable to sync solr data: $?";
+
+	# start solr back up
+	delete $ENV{'SOLR_OPTS'};
+	print "- starting production solr\n";
+	system('solr/start.sh') == 0 or die "unable to start production solr: $?";
+}
 
 sub check_out_release
 {
@@ -357,7 +408,7 @@ sub index_release
 		open(STDERR, ">&OLDERR");
 	}
 
-	print $release->{'id'} . " trees = " . $config->param("trees"), "\n";
+	#print $release->{'id'} . " trees = " . $config->param("trees"), "\n";
 
 	### loop over packages
 
