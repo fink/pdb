@@ -8,6 +8,7 @@ if [ -z "$JAVA_HOME" ]; then
 			/opt/jdk1.5* \
 			/usr/java/jdk1.6* \
 			/usr/java/jdk1.5* \
+			/usr/lib/jvm/java-6-sun \
 			/usr/lib/jvm/java-1.6*-sun \
 			/usr/lib/jvm/java-1.5*-sun \
 			; do
