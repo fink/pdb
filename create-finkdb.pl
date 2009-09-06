@@ -166,7 +166,7 @@ if (not flock(LOCKFILE, LOCK_EX | LOCK_NB)) {
 {
 	my $distributions;
 
-	print "- parsing distribution/release information\n";
+	info("- parsing distribution/release information\n");
 
 	open (GET_DISTRIBUTIONS, $topdir . '/get_distributions.php |') or die "unable to run $topdir/get_distributions.php: $!";
 	my @keys = parse_csv(scalar(<GET_DISTRIBUTIONS>));
@@ -189,7 +189,7 @@ if (not flock(LOCKFILE, LOCK_EX | LOCK_NB)) {
 		my $entry = make_hash(\@keys, \@values);
 		my $id = $entry->{'id'};
 
-		print "  - found $id\n" if ($debug);
+		debug("  - found $id\n");
 
 		my $distribution_id = delete $entry->{'distribution_id'};
 		$distributions->{$distribution_id} = {} unless (exists $distributions->{$distribution_id});
@@ -200,21 +200,21 @@ if (not flock(LOCKFILE, LOCK_EX | LOCK_NB)) {
 	close (GET_RELEASES);
 }
 
-print Dumper($releases), "\n" if ($trace);
+trace(Dumper($releases));
 
 unless ($disable_solr) {
 	my $proc = Proc::ProcessTable->new(enable_ttys => 0);
 	for my $p (@{$proc->table}) {
 		if ($p->cmndline =~ /fink.temporary.solr/) {
-			print "- stopping old temporary solr(" . $p->pid . "): " . $p->cmndline . "\n";
+			info("- stopping old temporary solr(" . $p->pid . "): " . $p->cmndline);
 			$p->kill(15);
 		}
 	}
 
-	print "- syncing temporary solr instance\n";
+	info("- syncing temporary solr instance\n");
 	system('rsync', '-ar', '--exclude=*.log', '--exclude=work', '--exclude=index', '--exclude=CVS', '--delete-excluded', 'solr/', $solr_temp_path . '/') == 0 or die "unable to run rsync: $?";
 
-	print "- starting temporary solr instance\n";
+	info("- starting temporary solr instance\n");
 	$ENV{'SOLR_OPTS'} = "-Dfink.temporary.solr=1 -Djetty.port=$solr_temp_port";
 	system($solr_temp_path . '/start.sh') == 0 or die "unable to start solr on port $solr_temp_port: $?";
 }
@@ -225,7 +225,7 @@ for my $release (reverse sort keys %$releases)
 {
 	if (not $started) {
 		if ($release ne $start_at) {
-			print "- $release != $start_at\n" if ($trace);
+			trace("- $release != $start_at\n");
 			next;
 		}
 	}
@@ -233,7 +233,7 @@ for my $release (reverse sort keys %$releases)
 
 	unless ($disable_cvs)
 	{
-		print "- checking out $release\n";
+		info("- checking out $release\n");
 		check_out_release($releases->{$release});
 		sleep($pause);
 	}
@@ -245,30 +245,30 @@ for my $release (reverse sort keys %$releases)
 
 	unless ($disable_indexing)
 	{
-		print "- indexing $release\n";
+		info("- indexing $release\n");
 		index_release($releases->{$release}, 0);
 		sleep($pause);
 	}
 
 	unless ($disable_solr)
 	{
-		print "- posting $release to solr\n";
+		info("- posting $release to solr\n");
 		post_release_to_solr($releases->{$release});
 		sleep($pause);
 	}
 
 	unless ($disable_delete or $clear_db)
 	{
-		print "- removing obsolete $release files\n";
+		info("- removing obsolete $release files\n");
 		remove_obsolete_entries($releases->{$release});
 		sleep($pause);
 	}
 
 	if ($release eq $end_at) {
-		print "- $release = $end_at\n" if ($trace);
+		trace("- $release = $end_at\n");
 		last;
 	} else {
-		print "- $release != $end_at\n" if ($trace);
+		trace("- $release != $end_at\n");
 	}
 	commit_solr();
 }
@@ -281,7 +281,7 @@ unless ($disable_solr) {
 	# first, kill the newly-indexed Solr
 	for my $p (@{$proc->table}) {
 		if ($p->cmndline =~ /fink.temporary.solr/) {
-			print "- stopping temporary solr(" . $p->pid . "): " . $p->cmndline . "\n";
+			info("- stopping temporary solr(" . $p->pid . "): " . $p->cmndline);
 			$p->kill(15);
 		}
 	}
@@ -289,18 +289,18 @@ unless ($disable_solr) {
 	# next, kill the production Solr
 	for my $p (@{$proc->table}) {
 		if ($p->cmndline =~ /solr\/start.jar/) {
-			print "- stopping production solr(" . $p->pid . "): " . $p->cmndline . "\n";
+			info("- stopping production solr(" . $p->pid . "): " . $p->cmndline . "\n");
 			$p->kill(15);
 		}
 	}
 
 	# copy the new indexes to the production instance
-	print "- syncing indexes\n";
+	info("- syncing indexes\n");
 	system('rsync', '-ar', $solr_temp_path . '/solr/data/', 'solr/solr/data/') == 0 or die "unable to sync solr data: $?";
 
 	# start solr back up
 	delete $ENV{'SOLR_OPTS'};
-	print "- starting production solr\n";
+	info("- starting production solr\n");
 	system('solr/start.sh') == 0 or die "unable to start production solr: $?";
 }
 
@@ -408,7 +408,7 @@ sub index_release
 		open(STDERR, ">&OLDERR");
 	}
 
-	#print $release->{'id'} . " trees = " . $config->param("trees"), "\n";
+	trace($release->{'id'} . " trees = " . $config->param("trees"), "\n");
 
 	### loop over packages
 
@@ -551,7 +551,7 @@ sub index_release
 			is_common_splitoff   => $is_common_splitoff,
 		};
 
-		print "  - ", package_id($package_info), "\n" if ($debug);
+		debug("  - ", package_id($package_info));
 
 		my $pkg_id = package_id($package_info);
 		my $doc_id = $release->{'id'} . '-' . $pkg_id;
@@ -660,7 +660,7 @@ sub remove_obsolete_entries
 				return unless (/.xml$/);
 				my $file = $_;
 
-				print "file = $file\n" if ($trace);
+				trace("file = $file\n");
 
 				my $contents = read_file($file, binmode => ':utf8');
 				my ($doc_id)   = $contents =~ /<field name="doc_id">([^<]+)/;
@@ -672,9 +672,9 @@ sub remove_obsolete_entries
 				my $infofilename = $basepath . '/fink/dists/' . $infofile;
 				if (-f $infofilename)
 				{
-					print "  - package $name is still valid ($infofile)\n" if ($trace);
+					trace("  - package $name is still valid ($infofile)\n");
 				} else {
-					print "  - package $name is obsolete ($infofile)\n" if ($debug);
+					debug("  - package $name is obsolete ($infofile)\n");
 					do_post('<delete><query>+doc_id:"' . $doc_id . '"</query></delete>');
 					unlink($file);
 				}
@@ -692,9 +692,9 @@ sub remove_obsolete_entries
 		my $infofilename = $basepath . '/fink/dists/' . $package->{'infofile'};
 		if (-f $infofilename)
 		{
-			print "  - package ", $package->{'name'}, " is still valid (", $package->{'infofile'}, ")\n" if ($trace);
+			trace("  - package ", $package->{'name'}, " is still valid (", $package->{'infofile'}, ")\n");
 		} else {
-			print "  - package ", $package->{'name'}, " is obsolete (", $package->{'infofile'}, ")\n" if ($debug);
+			debug("  - package ", $package->{'name'}, " is obsolete (", $package->{'infofile'}, ")\n");
 			do_post('<delete><query>+doc_id:"' . $package->{'doc_id'} . '"</query></delete>');
 		}
 	}
@@ -739,18 +739,18 @@ sub run_command
 	mkpath($workingdir);
 
 	my $fromdir = getcwd();
-	print "  - changing directory to $workingdir\n" if ($trace);
+	trace("  - changing directory to $workingdir\n");
 	chdir($workingdir);
 
-	print "  - running: @command\n" if ($debug);
+	debug("  - running: @command\n");
 	open(RUN, "@command |") or die "unable to run @command: $!";
 	while (<RUN>)
 	{
-		print "  - " . $_ if ($trace);
+		trace("  - " . $_);
 	}
 	close(RUN);
 
-	print "  - changing directory to $fromdir\n" if ($trace);
+	trace("  - changing directory to $fromdir\n");
 	chdir($fromdir);
 }
 
@@ -845,7 +845,7 @@ sub post_to_solr
 	my $response = $ua->request($req);
 	if ($response->is_error())
 	{
-		print "failed to post update: " . $response->status_line() . "\n\nresponse content was:\n" . $response->content . "\n\nrequest content was:\n" . $req->content;
+		info("failed to post update: " . $response->status_line() . "\n\nresponse content was:\n" . $response->content . "\n\nrequest content was:\n" . $req->content);
 		return 0;
 	}
 	return 1;
@@ -903,7 +903,7 @@ sub get_packages_from_solr
 
 	my $documents = $xml->getElementsByTagName("doc");
 	my $num_docs = $documents->getLength();
-	print "  - get_packages_from_solr($query) found $num_docs documents\n" if ($debug);
+	debug("  - get_packages_from_solr($query) found $num_docs documents\n");
 	for (my $i = 0; $i < $num_docs; $i++)
 	{
 		my $package = {};
@@ -960,5 +960,17 @@ Options:
 
 EOMSG
 }
+
+sub log_stdout
+{
+	my $line = join('', @_);
+	chomp($line);
+	my ($sec,$min,$hour,$mday,$mon,$year,$wday,$yday,$isdst)=localtime(time);
+	print sprintf('%4d-%02d-%02d %02d:%02d:%02d', $year+1900,$mon+1,$mday,$hour,$min,$sec), ' ', $line, "\n";
+}
+
+sub info  { log_stdout(@_); }
+sub debug { log_stdout(@_) if ($debug); }
+sub trace { log_stdout(@_) if ($trace); }
 
 # vim: ts=4 sw=4 noet
