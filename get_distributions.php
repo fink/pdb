@@ -5,7 +5,7 @@ include "web/pdb/releases.inc";
 
 $print_releases = 0;
 
-if ($argv[1] == "-r") {
+if (isset($argv[1]) && ($argv[1] == "-r")) {
 	$print_releases = 1;
 }
 
