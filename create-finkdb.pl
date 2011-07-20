@@ -325,7 +325,7 @@ unless ($disable_solr) {
 
 	# copy the new indexes to the production instance
 	info("- syncing indexes\n");
-	system('rsync', '-ar', $solr_temp_path . '/solr/data/', 'solr/solr/data/') == 0 or die "unable to sync solr data: $?";
+	system('rsync', '--delete', '-ar', '--exclude=CVS', $solr_temp_path . '/solr/data/', 'solr/solr/data/') == 0 or die "unable to sync solr data: $?";
 
 	# start solr back up
 	$ENV{'SOLR_OPTS'} = '-Dfink.production.solr=1';
