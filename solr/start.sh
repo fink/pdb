@@ -19,9 +19,9 @@ if [ -z "$JAVA_HOME" ]; then
 	done
 fi
 
+LOGFILE=/dev/null
 MYDIR=`dirname "$0"`
 TOPDIR=`cd $MYDIR; pwd`
 
 cd "$TOPDIR"
-#echo "JAVA_HOME=$JAVA_HOME, TOPDIR=$TOPDIR"
-exec $JAVA_HOME/bin/java -Xms128m -Xmx512m -XX:MaxHeapFreeRatio=80 -XX:MinHeapFreeRatio=20 -Djava.net.preferIPv4Stack=true $SOLR_OPTS -jar $TOPDIR/start.jar >/dev/null 2>&1 &
+exec $JAVA_HOME/bin/java -Xms128m -Xmx512m -XX:MaxHeapFreeRatio=80 -XX:MinHeapFreeRatio=20 -Djava.net.preferIPv4Stack=true $SOLR_OPTS -jar $TOPDIR/start.jar >$LOGFILE 2>&1 &
