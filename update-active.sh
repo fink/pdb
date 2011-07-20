@@ -1,6 +1,6 @@
 #!/bin/sh
 
-COMMAND="./create-finkdb.pl"
+COMMAND="sudo -u pdb ./create-finkdb.pl"
 if [ `/usr/bin/id -un` != "root" ]; then
 	echo "you must run this script as root!"
 	exit 1
