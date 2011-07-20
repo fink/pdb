@@ -93,8 +93,10 @@ use vars qw(
 	$solr_temp_path
 	$solr_url
 	$solr
+	$solr_post_chunk_size
 
 	$clear_db
+	$keep_temporary
 	$disable_cvs
 	$disable_indexing
 	$disable_solr
@@ -115,7 +117,9 @@ $xmldir         = $tempdir . '/xml';
 $start_at       = '';
 $end_at         = '';
 $solr_temp_path = $tempdir . '/solr';
+$solr_post_chunk_size = 100;
 
+$keep_temporary   = 0;
 $clear_db         = 1;
 $disable_cvs      = 0;
 $disable_indexing = 0;
@@ -146,6 +150,7 @@ GetOptions(
 	'url=s',           => \$solr_url,
 
 	'clear-db'         => \$clear_db,
+	'keep-temporary'   => \$keep_temporary,
 	'disable-cvs'      => \$disable_cvs,
 	'disable-indexing' => \$disable_indexing,
 	'disable-solr'     => \$disable_solr,
@@ -230,7 +235,7 @@ $started = 1 if ($start_at eq '');
 for my $release (reverse sort keys %$releases)
 {
 	if (not $started) {
-		if ($release ne $start_at) {
+		if ($release ne $start_at and $start_at ne "") {
 			trace("- $release != $start_at\n");
 			next;
 		}
@@ -244,8 +249,9 @@ for my $release (reverse sort keys %$releases)
 		sleep($pause);
 	}
 
-	if ($clear_db)
+	if ($clear_db and not $disable_solr)
 	{
+		info("- deleting old data for $release\n");
 		delete_release($releases->{$release});
 	}
 
@@ -270,33 +276,46 @@ for my $release (reverse sort keys %$releases)
 		sleep($pause);
 	}
 
-	if ($release eq $end_at) {
+	unless ($disable_solr)
+	{
+		commit_solr();
+	}
+
+	if ($release eq $end_at)
+	{
 		trace("- $release = $end_at\n");
 		last;
-	} else {
-		trace("- $release != $end_at\n");
 	}
-	commit_solr();
+	else
+	{
+		if ($end_at ne "") {
+			trace("- $release != $end_at\n");
+		}
+	}
 }
 
-optimize_solr();
+unless ($disable_solr) {
+	optimize_solr();
+}
 
 unless ($disable_solr) {
 	my $proc = Proc::ProcessTable->new(enable_ttys => 0);
 
 	# first, kill the newly-indexed Solr
-	for my $p (@{$proc->table}) {
-		if ($p->cmndline =~ /fink.temporary.solr/) {
-			info("- stopping temporary solr(" . $p->pid . "): " . $p->cmndline);
-			$p->kill(15);
-			debug("  - waiting a few seconds for it to shut down");
-			sleep(5);
+	unless ($keep_temporary) {
+		for my $p (@{$proc->table}) {
+			if ($p->cmndline =~ /fink.temporary.solr/) {
+				info("- stopping temporary solr(" . $p->pid . "): " . $p->cmndline);
+				$p->kill(15);
+				debug("  - waiting a few seconds for it to shut down");
+				sleep(5);
+			}
 		}
 	}
 
 	# next, kill the production Solr
 	for my $p (@{$proc->table}) {
-		if ($p->cmndline =~ /solr\/start.jar/) {
+		if ($p->cmndline =~ /fink.production.solr/) {
 			info("- stopping production solr(" . $p->pid . "): " . $p->cmndline . "\n");
 			$p->kill(15);
 			debug("  - waiting a few seconds for it to shut down");
@@ -309,7 +328,7 @@ unless ($disable_solr) {
 	system('rsync', '-ar', $solr_temp_path . '/solr/data/', 'solr/solr/data/') == 0 or die "unable to sync solr data: $?";
 
 	# start solr back up
-	delete $ENV{'SOLR_OPTS'};
+	$ENV{'SOLR_OPTS'} = '-Dfink.production.solr=1';
 	info("- starting production solr\n");
 	system('solr/start.sh') == 0 or die "unable to start production solr: $?";
 }
@@ -577,7 +596,6 @@ sub index_release
 		my $writer = XML::Writer->new(OUTPUT => \$xml, UNSAFE => 1);
 
 		# alternate schema, solr
-		$writer->startTag("add");
 		$writer->startTag("doc");
 
 		$writer->cdataElement("field", $pkg_id, "name" => "pkg_id");
@@ -592,7 +610,6 @@ sub index_release
 		}
 
 		$writer->endTag("doc");
-		$writer->endTag("add");
 
 		$writer->end();
 
@@ -644,17 +661,31 @@ sub post_release_to_solr
 
 	my $xmlpath = get_xmlpath($release);
 
+	my @files;
+
 	find(
 		{
 			wanted => sub {
 				return unless (/.xml$/);
-				my $file = $_;
-				do_post($file);
+				push(@files, $File::Find::name);
 			},
 			no_chdir => 1,
 		},
 		$xmlpath,
 	);
+
+	my $limit = $solr_post_chunk_size;
+	while (@files) {
+		my $count = 0;
+
+		my $text = "<add>";
+		while (++$count < $limit && @files) {
+			$text .= read_file(shift(@files));
+		}
+		$text .= "</add>";
+
+		do_post($text);
+	}
 }
 
 sub remove_obsolete_entries
@@ -845,7 +876,7 @@ sub post_to_solr
 	$req->content_type('text/xml; charset=utf-8');
 
 	# post the data
-	if (-f $data)
+	if ($data !~ /\n/ and -f $data)
 	{
 		$req->content(scalar read_file($data, binmode => ':utf8'));
 	} else {
@@ -959,6 +990,7 @@ Options:
 	--xmldir=<path>     where to write the .xml files
 
 	--clear-db          delete existing index before doing anything
+	--keep-temporary    keep the temporary solr instance running after import
 	--disable-cvs       don't check out .info files
 	--disable-indexing  don't index .info files to .xml files
 	--disable-solr      don't post updated .xml files to solr
