@@ -4,10 +4,10 @@ How to set up your own pdb instance:
 cvs -d :pserver:anonymous@fink.cvs.sourceforge.net:/cvsroot/fink co pdb
 cd pdb
 
-# update to the branch (just for now)
-pushd web/pdb
-cvs up -r pdb_solr
-popd
+# OBSOLETE update to the branch (just for now)
+#pushd web/pdb
+#cvs up -r pdb_solr
+#popd
 
 # run solr
 cd solr
