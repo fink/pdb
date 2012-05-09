@@ -546,7 +546,7 @@ sub index_release
 			sort_version      => $sort_value,
 			version           => $packageobj->get_version(),
 			revision          => $packageobj->get_revision(),
-			epoch             => $packageobj->get_epoch(),
+			epoch             => $packageobj->get_epoch() || '0',
 			descshort         => $packageobj->get_shortdescription(),
 			desclong          => $desc,
 			descusage         => $usage,
