@@ -48,7 +48,7 @@
     <!-- Use this connector for many frequently idle connections
          and for threadless continuations.
     -->    
-    <!--
+  <!--
     <Call name="addConnector">
       <Arg>
           <New class="org.mortbay.jetty.nio.SelectChannelConnector">
@@ -63,7 +63,7 @@
           </New>
       </Arg>
     </Call>
-    -->
+  -->
 
     <!-- This connector is currently being used for Solr because it
           showed better performance than nio.SelectChannelConnector
