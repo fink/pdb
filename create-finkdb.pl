@@ -344,7 +344,7 @@ sub check_out_release
 
 	my @command = (
 		'cvs',
-		'-q',
+		'-qz3',
 		'-d', ':pserver:anonymous@fink.cvs.sourceforge.net:/cvsroot/fink',
 		'checkout',
 		'-PA',
@@ -358,7 +358,7 @@ sub check_out_release
 		chomp(my $repo = read_file($checkoutroot . '/dists/CVS/Repository', binmode => ':utf8'));
 		if ($repo eq $release->{'distribution'}->{'rcspath'})
 		{
-			@command = ( 'cvs', '-q', 'update', '-Pd', '-r', $tag );
+			@command = ( 'cvs', '-qz3', 'update', '-Pd', '-r', $tag );
 			$workingdir = $checkoutroot . '/dists';
 		} else {
 			rmtree($checkoutroot . '/dists');
