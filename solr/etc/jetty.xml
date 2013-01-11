@@ -204,9 +204,9 @@
     <Ref id="RequestLog">
       <Set name="requestLog">
         <New id="RequestLogImpl" class="org.mortbay.jetty.NCSARequestLog">
-          <Set name="filename"><SystemProperty name="jetty.logs" default="./logs"/>/yyyy_mm_dd.request.log</Set>
+          <Set name="filename"><SystemProperty name="jetty.logs" default="/var/log/pdb"/>/yyyy_mm_dd.request.log</Set>
           <Set name="filenameDateFormat">yyyy_MM_dd</Set>
-          <Set name="retainDays">30</Set>
+          <Set name="retainDays">14</Set>
           <Set name="append">true</Set>
           <Set name="extended">false</Set>
           <Set name="logCookies">false</Set>
@@ -221,5 +221,10 @@
     <Set name="sendServerVersion">false</Set>
     <Set name="sendDateHeader">false</Set>
     <Set name="gracefulShutdown">1000</Set>
+
+    <Call class="java.lang.System" name="setProperty">
+      <Arg>java.util.logging.config.file</Arg>
+      <Arg>./etc/logging.properties</Arg>
+    </Call>
 
 </Configure>
