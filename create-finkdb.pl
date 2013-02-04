@@ -330,7 +330,7 @@ unless ($disable_solr) {
 	# start solr back up
 	$ENV{'SOLR_OPTS'} = '-Dfink.production.solr=1';
 	info("- starting production solr\n");
-	system('solr/start.sh') == 0 or die "unable to start production solr: $?";
+	system(getcwd() . '/solr/start.sh') == 0 or die "unable to start production solr: $?";
 }
 
 sub check_out_release
