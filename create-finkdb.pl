@@ -100,6 +100,7 @@ use vars qw(
 	$disable_cvs
 	$disable_indexing
 	$disable_solr
+	$disable_local_solr
 	$disable_delete
 
 	$ua
@@ -119,12 +120,13 @@ $end_at         = '';
 $solr_temp_path = $tempdir . '/solr';
 $solr_post_chunk_size = 100;
 
-$keep_temporary   = 0;
-$clear_db         = 1;
-$disable_cvs      = 0;
-$disable_indexing = 0;
-$disable_solr     = 0;
-$disable_delete   = 0;
+$keep_temporary     = 0;
+$clear_db           = 1;
+$disable_cvs        = 0;
+$disable_indexing   = 0;
+$disable_solr       = 0;
+$disable_local_solr = 0;
+$disable_delete     = 0;
 
 mkpath($tempdir . '/logs');
 $solr = WebService::Solr->new(
@@ -141,24 +143,25 @@ $ua = LWP::UserAgent->new();
 
 # process command-line
 GetOptions(
-	'help'             => \$wanthelp,
-	'xmldir=s'         => \$xmldir,
-	'tempdir=s'        => \$tempdir,
-	'verbose'          => \$debug,
-	'trace'            => \$trace,
-	'pause=i'          => \$pause,
-	'start-at=s'       => \$start_at,
-	'end-at=s'         => \$end_at,
+	'help'               => \$wanthelp,
+	'xmldir=s'           => \$xmldir,
+	'tempdir=s'          => \$tempdir,
+	'verbose'            => \$debug,
+	'trace'              => \$trace,
+	'pause=i'            => \$pause,
+	'start-at=s'         => \$start_at,
+	'end-at=s'           => \$end_at,
 
-	'url=s',           => \$solr_url,
-	'port=s',          => \$solr_temp_port,
+	'url=s',             => \$solr_url,
+	'port=s',            => \$solr_temp_port,
 
-	'clear-db'         => \$clear_db,
-	'keep-temporary'   => \$keep_temporary,
-	'disable-cvs'      => \$disable_cvs,
-	'disable-indexing' => \$disable_indexing,
-	'disable-solr'     => \$disable_solr,
-	'disable-delete'   => \$disable_delete,
+	'clear-db'           => \$clear_db,
+	'keep-temporary'     => \$keep_temporary,
+	'disable-cvs'        => \$disable_cvs,
+	'disable-indexing'   => \$disable_indexing,
+	'disable-solr'       => \$disable_solr,
+	'disable-local-solr' => \$disable_local_solr,
+	'disable-delete'     => \$disable_delete,
 ) or &die_with_usage;
 
 $debug++ if ($trace);
@@ -211,7 +214,7 @@ if (not flock(LOCKFILE, LOCK_EX | LOCK_NB)) {
 
 trace(Dumper($releases));
 
-unless ($disable_solr) {
+unless ($disable_local_solr) {
 	my $proc = Proc::ProcessTable->new(enable_ttys => 0);
 	for my $p (@{$proc->table}) {
 		if ($p->cmndline =~ /fink.temporary.solr/) {
@@ -302,7 +305,7 @@ unless ($disable_solr) {
 	optimize_solr();
 }
 
-unless ($disable_solr) {
+unless ($disable_local_solr) {
 	my $proc = Proc::ProcessTable->new(enable_ttys => 0);
 
 	# first, kill the newly-indexed Solr
@@ -987,25 +990,26 @@ sub die_with_usage
 Usage: $0 [options]
 
 Options:
-	--help              this help
-	--verbose           verbose output
-	--trace             extremely verbose output
+	--help               this help
+	--verbose            verbose output
+	--trace              extremely verbose output
 
-	--url=<path>        where SOLR's root is (default: http://127.0.0.1:1234/solr)
-	--port=<port>       SOLR's port
-	--tempdir=<path>    where to put temporary files
-	--xmldir=<path>     where to write the .xml files
+	--url=<path>         where SOLR's root is (default: http://127.0.0.1:1234/solr)
+	--port=<port>        SOLR's port
+	--tempdir=<path>     where to put temporary files
+	--xmldir=<path>      where to write the .xml files
 
-	--clear-db          delete existing index before doing anything
-	--keep-temporary    keep the temporary solr instance running after import
-	--disable-cvs       don't check out .info files
-	--disable-indexing  don't index .info files to .xml files
-	--disable-solr      don't post updated .xml files to solr
-	--disable-delete    don't delete outdated packages
+	--clear-db           delete existing index before doing anything
+	--keep-temporary     keep the temporary solr instance running after import
+	--disable-cvs        don't check out .info files
+	--disable-indexing   don't index .info files to .xml files
+	--disable-solr       don't post updated .xml files to solr
+	--disable-local-solr don't use provided solr
+	--disable-delete     don't delete outdated packages
 
-	--pause=<seconds>   pause for X seconds between phases (default: 60)
-	--start-at=<foo>    start at the given release ID
-	--end-at=<foo>      end at the given release ID
+	--pause=<seconds>    pause for X seconds between phases (default: 60)
+	--start-at=<foo>     start at the given release ID
+	--end-at=<foo>       end at the given release ID
 
 EOMSG
 }
