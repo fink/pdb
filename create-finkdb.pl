@@ -30,7 +30,7 @@ use File::Basename;
 use File::Slurp;
 use Math::BigInt;
 use Proc::ProcessTable;
-use Solr;
+use WebService::Solr;
 use Text::CSV_XS;
 use utf8;
 
@@ -127,11 +127,14 @@ $disable_solr     = 0;
 $disable_delete   = 0;
 
 mkpath($tempdir . '/logs');
-$solr = Solr->new(
-	schema  => 'solr/solr/conf/schema.xml',
-	port    => $solr_temp_port,
-	url     => $solr_url,
-	log_dir => $tempdir . '/logs',
+$solr = WebService::Solr->new(
+	$solr_url,
+	{
+		schema  => 'solr/solr/conf/schema.xml',
+		port    => $solr_temp_port,
+		url     => $solr_url,
+		log_dir => $tempdir . '/logs',
+	}
 );
 
 $ua = LWP::UserAgent->new();
@@ -148,6 +151,7 @@ GetOptions(
 	'end-at=s'         => \$end_at,
 
 	'url=s',           => \$solr_url,
+	'port=s',          => \$solr_temp_port,
 
 	'clear-db'         => \$clear_db,
 	'keep-temporary'   => \$keep_temporary,
@@ -988,6 +992,7 @@ Options:
 	--trace             extremely verbose output
 
 	--url=<path>        where SOLR's root is (default: http://127.0.0.1:1234/solr)
+	--port=<port>       SOLR's port
 	--tempdir=<path>    where to put temporary files
 	--xmldir=<path>     where to write the .xml files
 
