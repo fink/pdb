@@ -347,7 +347,26 @@ sub check_out_release
 
 	my $tag = get_tag_name($release->{'version'});
 	my $checkoutroot = get_basepath($release) . '/fink';
+	my $basedir = $checkoutroot;
+
+	my $exportdir    = "dists";
+
+	if ($release->{'distribution'}->{'rcspath'} =~ /(10.[4-5]-EOL)$/i) {
+		$exportdir = $1;
+		$checkoutroot .= '/dists/stable/main/finkinfo';
+
+		unless(-d $checkoutroot) {
+			use File::Spec;
+			foreach (File::Spec->splitdir($checkoutroot)) {
+				$basedir = File::Spec->catdir($basedir, $_);
+				next if -d $basedir;
+				mkdir($basedir) || die $!;
+			}
+		}
+	}
+
 	my $workingdir   = $checkoutroot;
+	my $cvsrep       = $checkoutroot . '/' . $exportdir . '/CVS/Repository';
 
 	my @command = (
 		'cvs',
@@ -356,19 +375,19 @@ sub check_out_release
 		'checkout',
 		'-PA',
 		'-r', $tag,
-		'-d', 'dists',
+		'-d', $exportdir,
 		$release->{'distribution'}->{'rcspath'}
 	);
 
-	if (-e $checkoutroot . '/dists/CVS/Repository')
+	if (-e $cvsrep)
 	{
-		chomp(my $repo = read_file($checkoutroot . '/dists/CVS/Repository', binmode => ':utf8'));
+		chomp(my $repo = read_file($cvsrep, binmode => ':utf8'));
 		if ($repo eq $release->{'distribution'}->{'rcspath'})
 		{
 			@command = ( 'cvs', '-qz3', 'update', '-Pd', '-r', $tag );
-			$workingdir = $checkoutroot . '/dists';
+			$workingdir .= '/' . $exportdir;
 		} else {
-			rmtree($checkoutroot . '/dists');
+			rmtree($checkoutroot . '/' . $exportdir);
 		}
 	}
 
