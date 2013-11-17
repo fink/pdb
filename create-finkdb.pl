@@ -391,9 +391,35 @@ sub check_out_release
 		}
 	}
 
-	system('chmod', '-f', '00750', '/home/pdb/cvs/pdb/work/basepath/10.5-i386-current-unstable/fink/dists/unstable/main/finkinfo/10.4-EOL', '/home/pdb/cvs/pdb/work/basepath/10.5-i386-current-unstable/fink/dists/stable/main/finkinfo/10.4-EOL', '/home/pdb/cvs/pdb/work/basepath/10.5-i386-current-stable/fink/dists/unstable/main/finkinfo/10.4-EOL', '/home/pdb/cvs/pdb/work/basepath/10.5-i386-current-stable/fink/dists/stable/main/finkinfo/10.4-EOL', '/home/pdb/cvs/pdb/work/basepath/10.5-powerpc-current-unstable/fink/dists/unstable/main/finkinfo/10.4-EOL', '/home/pdb/cvs/pdb/work/basepath/10.5-powerpc-current-unstable/fink/dists/stable/main/finkinfo/10.4-EOL', '/home/pdb/cvs/pdb/work/basepath/10.5-powerpc-current-stable/fink/dists/unstable/main/finkinfo/10.4-EOL', '/home/pdb/cvs/pdb/work/basepath/10.5-powerpc-current-stable/fink/dists/stable/main/finkinfo/10.4-EOL', '/home/pdb/cvs/pdb/work/basepath/10.5-x86_64-current-unstable/fink/dists/unstable/main/finkinfo/10.4-EOL', '/home/pdb/cvs/pdb/work/basepath/10.5-x86_64-current-unstable/fink/dists/stable/main/finkinfo/10.4-EOL', '/home/pdb/cvs/pdb/work/basepath/10.5-x86_64-current-stable/fink/dists/unstable/main/finkinfo/10.4-EOL', '/home/pdb/cvs/pdb/work/basepath/10.5-x86_64-current-stable/fink/dists/stable/main/finkinfo/10.4-EOL', '/home/pdb/cvs/pdb/work/basepath/10.6-i386-current-unstable/fink/dists/unstable/main/finkinfo/10.4-EOL', '/home/pdb/cvs/pdb/work/basepath/10.6-i386-current-unstable/fink/dists/stable/main/finkinfo/10.4-EOL', '/home/pdb/cvs/pdb/work/basepath/10.6-i386-current-stable/fink/dists/unstable/main/finkinfo/10.4-EOL', '/home/pdb/cvs/pdb/work/basepath/10.6-i386-current-stable/fink/dists/stable/main/finkinfo/10.4-EOL', '/home/pdb/cvs/pdb/work/basepath/10.6-powerpc-current-unstable/fink/dists/unstable/main/finkinfo/10.4-EOL', '/home/pdb/cvs/pdb/work/basepath/10.6-powerpc-current-unstable/fink/dists/stable/main/finkinfo/10.4-EOL', '/home/pdb/cvs/pdb/work/basepath/10.6-powerpc-current-stable/fink/dists/unstable/main/finkinfo/10.4-EOL', '/home/pdb/cvs/pdb/work/basepath/10.6-powerpc-current-stable/fink/dists/stable/main/finkinfo/10.4-EOL', '/home/pdb/cvs/pdb/work/basepath/10.6-x86_64-current-unstable/fink/dists/unstable/main/finkinfo/10.4-EOL', '/home/pdb/cvs/pdb/work/basepath/10.6-x86_64-current-unstable/fink/dists/stable/main/finkinfo/10.4-EOL', '/home/pdb/cvs/pdb/work/basepath/10.6-x86_64-current-stable/fink/dists/unstable/main/finkinfo/10.4-EOL', '/home/pdb/cvs/pdb/work/basepath/10.6-x86_64-current-stable/fink/dists/stable/main/finkinfo/10.4-EOL');
+	my @mydists = ('unstable', 'stable');
+	my @mybranches = ('main', 'crypto');
+	my @myEOLs = ('10.4-EOL', '10.5-EOL');
+	my ($mydist, $mybranch, $myEOL);
+	unless ($release->{'distribution'}->{'rcspath'} =~ /(10.[4-5]-EOL)$/i) {
+		foreach $mydist (@mydists) {
+			foreach $mybranch (@mybranches) {
+				foreach $myEOL (@myEOLs) {
+					if (-d $checkoutroot . '/' . $exportdir . '/' . $mydist . '/' . $mybranch . '/finkinfo/' . $myEOL) {
+						system('chmod', '-f', '00750',  $checkoutroot . '/' . $exportdir . '/' . $mydist . '/' . $mybranch . '/finkinfo/' . $myEOL);
+					}
+				}
+			}
+		}
+	}
+
 	run_command($workingdir, @command);
-	system('chmod', '-f', '00000', '/home/pdb/cvs/pdb/work/basepath/10.5-i386-current-unstable/fink/dists/unstable/main/finkinfo/10.4-EOL', '/home/pdb/cvs/pdb/work/basepath/10.5-i386-current-unstable/fink/dists/stable/main/finkinfo/10.4-EOL', '/home/pdb/cvs/pdb/work/basepath/10.5-i386-current-stable/fink/dists/unstable/main/finkinfo/10.4-EOL', '/home/pdb/cvs/pdb/work/basepath/10.5-i386-current-stable/fink/dists/stable/main/finkinfo/10.4-EOL', '/home/pdb/cvs/pdb/work/basepath/10.5-powerpc-current-unstable/fink/dists/unstable/main/finkinfo/10.4-EOL', '/home/pdb/cvs/pdb/work/basepath/10.5-powerpc-current-unstable/fink/dists/stable/main/finkinfo/10.4-EOL', '/home/pdb/cvs/pdb/work/basepath/10.5-powerpc-current-stable/fink/dists/unstable/main/finkinfo/10.4-EOL', '/home/pdb/cvs/pdb/work/basepath/10.5-powerpc-current-stable/fink/dists/stable/main/finkinfo/10.4-EOL', '/home/pdb/cvs/pdb/work/basepath/10.5-x86_64-current-unstable/fink/dists/unstable/main/finkinfo/10.4-EOL', '/home/pdb/cvs/pdb/work/basepath/10.5-x86_64-current-unstable/fink/dists/stable/main/finkinfo/10.4-EOL', '/home/pdb/cvs/pdb/work/basepath/10.5-x86_64-current-stable/fink/dists/unstable/main/finkinfo/10.4-EOL', '/home/pdb/cvs/pdb/work/basepath/10.5-x86_64-current-stable/fink/dists/stable/main/finkinfo/10.4-EOL', '/home/pdb/cvs/pdb/work/basepath/10.6-i386-current-unstable/fink/dists/unstable/main/finkinfo/10.4-EOL', '/home/pdb/cvs/pdb/work/basepath/10.6-i386-current-unstable/fink/dists/stable/main/finkinfo/10.4-EOL', '/home/pdb/cvs/pdb/work/basepath/10.6-i386-current-stable/fink/dists/unstable/main/finkinfo/10.4-EOL', '/home/pdb/cvs/pdb/work/basepath/10.6-i386-current-stable/fink/dists/stable/main/finkinfo/10.4-EOL', '/home/pdb/cvs/pdb/work/basepath/10.6-powerpc-current-unstable/fink/dists/unstable/main/finkinfo/10.4-EOL', '/home/pdb/cvs/pdb/work/basepath/10.6-powerpc-current-unstable/fink/dists/stable/main/finkinfo/10.4-EOL', '/home/pdb/cvs/pdb/work/basepath/10.6-powerpc-current-stable/fink/dists/unstable/main/finkinfo/10.4-EOL', '/home/pdb/cvs/pdb/work/basepath/10.6-powerpc-current-stable/fink/dists/stable/main/finkinfo/10.4-EOL', '/home/pdb/cvs/pdb/work/basepath/10.6-x86_64-current-unstable/fink/dists/unstable/main/finkinfo/10.4-EOL', '/home/pdb/cvs/pdb/work/basepath/10.6-x86_64-current-unstable/fink/dists/stable/main/finkinfo/10.4-EOL', '/home/pdb/cvs/pdb/work/basepath/10.6-x86_64-current-stable/fink/dists/unstable/main/finkinfo/10.4-EOL', '/home/pdb/cvs/pdb/work/basepath/10.6-x86_64-current-stable/fink/dists/stable/main/finkinfo/10.4-EOL');
+
+	unless ($release->{'distribution'}->{'rcspath'} =~ /(10.[4-5]-EOL)$/i) {
+		foreach $mydist (@mydists) {
+			foreach $mybranch (@mybranches) {
+				foreach $myEOL (@myEOLs) {
+					if (-d $checkoutroot . '/' . $exportdir . '/' . $mydist . '/' . $mybranch . '/finkinfo/' . $myEOL) {
+						system('chmod', '-f', '00000',  $checkoutroot . '/' . $exportdir . '/' . $mydist . '/' . $mybranch . '/finkinfo/' . $myEOL);
+					}
+				}
+			}
+		}
+	}
 }
 
 sub index_release
@@ -569,6 +595,11 @@ sub index_release
 			$sort_value .= sprintf("%04d", $numeric_revision);
 		}
 
+		my $distpath = $release->{'distribution'}->{'rcspath'};
+		if ($release->{'distribution'}->{'rcspath'} =~ /(10.[4-5]-EOL)$/i) {
+			$distpath = 'dists/10.4';
+		}
+
 		my $package_info = {
 			name              => $packageobj->get_name(),
 			sort_version      => $sort_value,
@@ -586,7 +617,8 @@ sub index_release
 			section           => $packageobj->get_section(),
 			parentname        => package_id($parent),
 			infofile          => $infofile,
-			rcspath           => $release->{'distribution'}->{'rcspath'} . '/' . $infofile,
+			
+			rcspath           => $distpath . '/' . $infofile,
 			tag               => get_tag_name($release->{'version'}),
 			infofilechanged   => $infofilechanged,
 			dist_id           => $release->{'distribution'}->{'id'},
