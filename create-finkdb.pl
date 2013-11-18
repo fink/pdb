@@ -103,6 +103,8 @@ use vars qw(
 	$disable_local_solr
 	$disable_delete
 
+	$debbaseurl
+
 	$ua
 );
 
@@ -127,6 +129,8 @@ $disable_indexing   = 0;
 $disable_solr       = 0;
 $disable_local_solr = 0;
 $disable_delete     = 0;
+
+$debbaseurl         = 'http://bindist.finkmirrors.net/';
 
 mkpath($tempdir . '/logs');
 $solr = WebService::Solr->new(
@@ -162,6 +166,8 @@ GetOptions(
 	'disable-solr'       => \$disable_solr,
 	'disable-local-solr' => \$disable_local_solr,
 	'disable-delete'     => \$disable_delete,
+
+	'debbaseurl=s'       => \$debbaseurl,
 ) or &die_with_usage;
 
 $debug++ if ($trace);
@@ -600,6 +606,8 @@ sub index_release
 			$distpath = 'dists/10.4';
 		}
 
+		my $debarchive =  get_deb_archive($release, $packageobj->get_name(), $packageobj->get_version(), $packageobj->get_revision(), $packageobj->get_section());
+
 		my $package_info = {
 			name              => $packageobj->get_name(),
 			sort_version      => $sort_value,
@@ -617,6 +625,7 @@ sub index_release
 			section           => $packageobj->get_section(),
 			parentname        => package_id($parent),
 			infofile          => $infofile,
+			debarchive        => $debarchive,
 			
 			rcspath           => $distpath . '/' . $infofile,
 			tag               => get_tag_name($release->{'version'}),
@@ -640,7 +649,7 @@ sub index_release
 			is_common_splitoff   => $is_common_splitoff,
 		};
 
-		debug("  - ", package_id($package_info));
+		debug("  - adding ", package_id($package_info));
 
 		my $pkg_id = package_id($package_info);
 		my $doc_id = $release->{'id'} . '-' . $pkg_id;
@@ -913,6 +922,38 @@ sub parse_csv
 	return [];
 }
 
+sub get_deb_archive
+{
+	my $release = shift;
+
+	my $name = shift;
+	my $version = shift;
+	my $revision = shift;
+	my $section = shift;
+
+	my $dist = $release->{'type'};
+	my $osx = $release->{'distribution'}->{'name'};
+	my $arch = $release->{'distribution'}->{'architecture'};
+
+	my $system = 'darwin';
+	my $tree = 'main';
+
+	if ($release->{'distribution'}->{'rcspath'} =~ /dists\/10.[0-9]\/$dist\/(.+)\/finkinfo\/.+\/.+\.info$/i) {
+		$tree = $1;
+		$tree = 'stable' if ($tree eq 'bindist');
+	}
+
+	my $debarchive = $osx.'/dists/'.$dist.'/'.$tree.'/binary-'.$system.'-'.$arch.'/'.$section.'/'.$name.'_'.$version.'-'.$revision.'_'.$system.'-'.$arch.'.deb';
+	use LWP::Simple qw(head);
+	if (head($debbaseurl.$debarchive)) {
+		debug("  - found $debarchive\n");
+		return $debarchive;
+	}
+
+	debug("  - missing $debarchive\n");
+
+	return "";
+}
 
 sub do_post
 {
@@ -1057,6 +1098,10 @@ Options:
 	--disable-solr       don't post updated .xml files to solr
 	--disable-local-solr don't use provided solr
 	--disable-delete     don't delete outdated packages
+
+	--debbaseurl=<url>   default base url to check for deb file, must
+                             contain protocol and tailing slash.
+                             (default: http://bindist.finkmirrors.net/)
 
 	--pause=<seconds>    pause for X seconds between phases (default: 60)
 	--start-at=<foo>     start at the given release ID
