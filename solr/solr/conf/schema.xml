@@ -272,6 +272,7 @@
    <field name="parentname_e"      type="string"    indexed="true"  stored="true"  required="false" />
    <field name="infofile"          type="text"      indexed="true"  stored="true"  required="false" />
    <field name="infofilechanged"   type="date"      indexed="true"  stored="true"  required="false" default="NOW" multiValued="false" />
+   <field name="debarchive"        type="text"      indexed="true"  stored="true"  required="false" />
 
 	<field name="has_parent"        type="boolean"   indexed="true"  stored="true"  default="false" />
 	<field name="has_common_splitoffs" type="boolean" indexed="true" stored="true"  default="false" />
