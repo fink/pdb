@@ -932,6 +932,7 @@ sub get_deb_archive
 	my $section = shift;
 
 	my $dist = $release->{'type'};
+	$dist = 'stable' if ($dist eq 'bindist');
 	my $osx = $release->{'distribution'}->{'name'};
 	my $arch = $release->{'distribution'}->{'architecture'};
 
@@ -940,7 +941,6 @@ sub get_deb_archive
 
 	if ($release->{'distribution'}->{'rcspath'} =~ /dists\/10.[0-9]\/$dist\/(.+)\/finkinfo\/.+\/.+\.info$/i) {
 		$tree = $1;
-		$tree = 'stable' if ($tree eq 'bindist');
 	}
 
 	my $debarchive = $osx.'/dists/'.$dist.'/'.$tree.'/binary-'.$system.'-'.$arch.'/'.$section.'/'.$name.'_'.$version.'-'.$revision.'_'.$system.'-'.$arch.'.deb';
