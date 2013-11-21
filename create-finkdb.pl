@@ -277,6 +277,15 @@ for my $release (reverse sort keys %$releases)
 
 	unless ($disable_solr)
 	{
+		info("- clearing $release from solr\n");
+		clear_release_from_solr($releases->{$release});
+		sleep($pause);
+		commit_solr();
+		sleep($pause);
+	}
+
+	unless ($disable_solr)
+	{
 		info("- posting $release to solr\n");
 		post_release_to_solr($releases->{$release});
 		sleep($pause);
@@ -357,20 +366,6 @@ sub check_out_release
 
 	my $exportdir    = "dists";
 
-	if ($release->{'distribution'}->{'rcspath'} =~ /(10.[4-5]-EOL)$/i) {
-		$exportdir = $1;
-		$checkoutroot .= '/dists/stable/main/finkinfo';
-
-		unless(-d $checkoutroot) {
-			use File::Spec;
-			foreach (File::Spec->splitdir($checkoutroot)) {
-				$basedir = File::Spec->catdir($basedir, $_);
-				next if -d $basedir;
-				mkdir($basedir) || die $!;
-			}
-		}
-	}
-
 	my $workingdir   = $checkoutroot;
 	my $cvsrep       = $checkoutroot . '/' . $exportdir . '/CVS/Repository';
 
@@ -397,32 +392,66 @@ sub check_out_release
 		}
 	}
 
-	my @mydists = ('unstable', 'stable');
+	my $mydist = $release->{'type'};
+	$mydist = 'stable' if ($mydist eq 'bindist');
+	$mydist = 'unstable' if ($mydist eq 'bindist-unstable');
+
+	# These chmods are terrible, Fink should be dealing with this internally
+	# But this seems to be required for the time being
 	my @mybranches = ('main', 'crypto');
-	my @myEOLs = ('10.4-EOL', '10.5-EOL');
-	my ($mydist, $mybranch, $myEOL);
-	unless ($release->{'distribution'}->{'rcspath'} =~ /(10.[4-5]-EOL)$/i) {
-		foreach $mydist (@mydists) {
-			foreach $mybranch (@mybranches) {
-				foreach $myEOL (@myEOLs) {
-					if (-d $checkoutroot . '/' . $exportdir . '/' . $mydist . '/' . $mybranch . '/finkinfo/' . $myEOL) {
-						system('chmod', '-f', '00750',  $checkoutroot . '/' . $exportdir . '/' . $mydist . '/' . $mybranch . '/finkinfo/' . $myEOL);
-					}
-				}
+	my ($mybranch, @sections, $section, $dirname);
+
+	my $osx = $release->{'distribution'}->{'name'};
+
+	foreach $mybranch (@mybranches) {
+		system('chmod', '-f', '00750', $checkoutroot . '/' . $exportdir . '/unstable') if ($mydist eq 'stable');
+		system('chmod', '-f', '00750', $checkoutroot . '/' . $exportdir . '/stable') if ($mydist eq 'unstable');
+		$dirname = $checkoutroot . '/' . $exportdir . '/' . $mydist . '/'. $mybranch . '/finkinfo/';
+		opendir my($dh), $dirname or next;
+			@sections = grep { !/^\.\.?$/ } readdir $dh;
+		closedir $dh;
+
+		# Only continue is EOLs exists.
+		next if (scalar(grep { /-EOL$/ } @sections) < 1);
+
+		foreach $section (@sections) {
+			if (-d $dirname . $section) {
+				debug('  - unlocking ' . $dirname . $section);
+				system('chmod', '-f', '00750',  $dirname . $section);
 			}
 		}
 	}
 
 	run_command($workingdir, @command);
 
-	unless ($release->{'distribution'}->{'rcspath'} =~ /(10.[4-5]-EOL)$/i) {
-		foreach $mydist (@mydists) {
-			foreach $mybranch (@mybranches) {
-				foreach $myEOL (@myEOLs) {
-					if (-d $checkoutroot . '/' . $exportdir . '/' . $mydist . '/' . $mybranch . '/finkinfo/' . $myEOL) {
-						system('chmod', '-f', '00000',  $checkoutroot . '/' . $exportdir . '/' . $mydist . '/' . $mybranch . '/finkinfo/' . $myEOL);
-					}
-				}
+	foreach $mybranch (@mybranches) {
+		system('chmod', '-f', '00000', $checkoutroot . '/' . $exportdir . '/unstable') if ($mydist eq 'stable');
+		system('chmod', '-f', '00000', $checkoutroot . '/' . $exportdir . '/stable') if ($mydist eq 'unstable');
+		$dirname = $checkoutroot . '/' . $exportdir . '/' . $mydist . '/'. $mybranch . '/finkinfo/';
+		opendir my($dh), $dirname or next;
+			@sections = grep { !/^\.\.?$/ } readdir $dh;
+		closedir $dh;
+
+		# Only continue is EOLs exists.
+		next if (scalar(grep { /-EOL$/ } @sections) < 1);
+			debug("  - found EOLs in dir list\n");
+
+		# Remove CVS dir
+		@sections = grep { !/^CVS$/ } @sections;
+
+		# Remove the current EOL or only EOL
+		if (scalar(grep { /${osx}-EOL$/ } @sections) > 0) {
+			debug("  - removing all but " . $osx . "-EOL from dir list\n");
+			@sections = grep { !/^${osx}-EOL$/ } @sections;
+		} else {
+			debug("  - removing EOLs from dir list\n");
+			@sections = grep { /-EOL$/ } @sections;
+		}
+
+		foreach $section (@sections) {
+			if (-d $dirname . $section) {
+				debug('  - locking ' . $dirname . $section);
+				system('chmod', '-f', '00000',  $dirname . $section);
 			}
 		}
 	}
@@ -602,11 +631,17 @@ sub index_release
 		}
 
 		my $distpath = $release->{'distribution'}->{'rcspath'};
-		if ($release->{'distribution'}->{'rcspath'} =~ /(10.[4-5]-EOL)$/i) {
-			$distpath = 'dists/10.4';
-		}
 
-		my $debarchive =  get_deb_archive($release, $packageobj->get_name(), $packageobj->get_version(), $packageobj->get_revision(), $packageobj->get_section());
+		my $debarchive = '';
+		if ($release->{'type'} eq 'bindist' || $release->{'type'} eq 'bindist-unstable') {
+			$debarchive = get_deb_archive($release, $packageobj->get_name(), $packageobj->get_version(), $packageobj->get_revision(), $packageobj->get_section());
+			if ($debarchive eq '') {
+				debug("  - skipping (deb not found) ".$packageobj->get_name()."\n");
+				next;
+			}
+
+			debug("  - adding (deb found) ".$packageobj->get_name()."\n");
+		}
 
 		my $package_info = {
 			name              => $packageobj->get_name(),
@@ -721,6 +756,13 @@ sub filter_description
 		}
 	}
 	return join("\n", @desc);
+}
+
+sub clear_release_from_solr
+{
+	my $release = shift;
+
+	do_clear($release);
 }
 
 sub post_release_to_solr
@@ -932,7 +974,9 @@ sub get_deb_archive
 	my $section = shift;
 
 	my $dist = $release->{'type'};
+	return '' unless ($dist eq 'bindist' || $dist eq 'bindist-unstable');
 	$dist = 'stable' if ($dist eq 'bindist');
+	$dist = 'unstable' if ($dist eq 'bindist-unstable');
 	my $osx = $release->{'distribution'}->{'name'};
 	my $arch = $release->{'distribution'}->{'architecture'};
 
@@ -946,13 +990,24 @@ sub get_deb_archive
 	my $debarchive = $osx.'/dists/'.$dist.'/'.$tree.'/binary-'.$system.'-'.$arch.'/'.$section.'/'.$name.'_'.$version.'-'.$revision.'_'.$system.'-'.$arch.'.deb';
 	use LWP::Simple qw(head);
 	if (head($debbaseurl.$debarchive)) {
-		debug("  - found $debarchive\n");
 		return $debarchive;
 	}
 
-	debug("  - missing $debarchive\n");
+	return '';
+}
 
-	return "";
+sub do_clear
+{
+	my $release = shift;
+	my $retries = 3;
+	my $retval;
+	while ($retries-- > 0) {
+		$retval = delete_release($release);
+		if ($retval) {
+			return 1
+		}
+	}
+	die "failed to delete '".$release->{'id'}."' after retries";
 }
 
 sub do_post
