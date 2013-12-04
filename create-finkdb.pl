@@ -895,7 +895,8 @@ sub run_command
 	chdir($workingdir);
 
 	debug("  - running: @command\n");
-	open(RUN, "@command |") or die "unable to run @command: $!";
+	# Add a 15 minute timeout, keep the script from hanging.
+	open(RUN, "/usr/bin/timeout 900 @command |") or die "unable to run @command: $!";
 	while (<RUN>)
 	{
 		trace("  - " . $_);
