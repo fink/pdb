@@ -30,7 +30,6 @@ use File::Basename;
 use File::Slurp;
 use Math::BigInt;
 use Proc::ProcessTable;
-use WebService::Solr;
 use Text::CSV_XS;
 use utf8;
 
@@ -95,6 +94,13 @@ use vars qw(
 	$solr
 	$solr_post_chunk_size
 
+	$sql_driver
+	$sql_host
+	$sql_db
+	$sql_port
+	$sql_user
+	$sql_pass
+
 	$clear_db
 	$keep_temporary
 	$disable_cvs
@@ -105,7 +111,11 @@ use vars qw(
 
 	$debbaseurl
 
+	$backend
+
 	$ua
+	$pkgs
+	$db
 );
 
 $csv            = Text::CSV_XS->new({ binary => 1 });
@@ -121,6 +131,12 @@ $start_at       = '';
 $end_at         = '';
 $solr_temp_path = $tempdir . '/solr';
 $solr_post_chunk_size = 100;
+$sql_driver     = 'mysql';
+$sql_host       = 'localhost';
+$sql_db         = 'pdb';
+$sql_port       = 3306;
+$sql_user       = 'pdb';
+$sql_pass       = '';
 
 $keep_temporary     = 0;
 $clear_db           = 1;
@@ -130,18 +146,11 @@ $disable_solr       = 0;
 $disable_local_solr = 0;
 $disable_delete     = 0;
 
+$backend            = 'solr';
+
 $debbaseurl         = 'http://bindist.finkmirrors.net/';
 
 mkpath($tempdir . '/logs');
-$solr = WebService::Solr->new(
-	$solr_url,
-	{
-		schema  => 'solr/solr/conf/schema.xml',
-		port    => $solr_temp_port,
-		url     => $solr_url,
-		log_dir => $tempdir . '/logs',
-	}
-);
 
 $ua = LWP::UserAgent->new();
 
@@ -168,11 +177,49 @@ GetOptions(
 	'disable-delete'     => \$disable_delete,
 
 	'debbaseurl=s'       => \$debbaseurl,
+
+	'backend=s'          => \$backend,
+
+	'sqlhost=s'          => \$sql_host,
+	'sqlport=i'          => \$sql_port,
+	'sqldb=s'            => \$sql_db,
+	'sqluser=s'          => \$sql_user,
+	'sqlpass=s'          => \$sql_pass,
 ) or &die_with_usage;
 
 $debug++ if ($trace);
 
 &die_with_usage if $wanthelp;
+
+if ($backend ne 'solr') {
+	$disable_local_solr = 1;
+	$disable_solr = 1;
+}
+
+if ($backend eq 'solr') {
+	use WebService::Solr;
+
+	$solr = WebService::Solr->new(
+		$solr_url,
+		{
+			schema  => 'solr/solr/conf/schema.xml',
+			port    => $solr_temp_port,
+			url     => $solr_url,
+			log_dir => $tempdir . '/logs',
+		}
+	);
+}
+
+if ($backend eq 'sql') {
+	use DBI;
+
+	my $dsn = "DBI:$sql_driver:database=$sql_db";
+	if ($sql_host ne 'localhost') {
+		$dsn .= ":$sql_host:$sql_port";
+	}	
+
+	$db = DBI->connect($dsn, $sql_user, $sql_pass) || die $DBI::errstr;
+}
 
 mkpath($tempdir);
 open(LOCKFILE, '>>' . $tempdir . '/create-finkdb.lock') or die "could not open lockfile for append: $!";
@@ -243,6 +290,10 @@ unless ($disable_local_solr) {
 	sleep(5);
 }
 
+if ($backend eq 'sql') {
+	create_sql_table();
+}
+
 my $started = 0;
 $started = 1 if ($start_at eq '');
 for my $release (reverse sort keys %$releases)
@@ -255,72 +306,41 @@ for my $release (reverse sort keys %$releases)
 	}
 	$started = 1;
 
-	unless ($disable_cvs)
-	{
-		info("- checking out $release\n");
+	unless ($disable_cvs) {
 		check_out_release($releases->{$release});
-		sleep($pause);
 	}
 
-	if ($clear_db and not $disable_solr)
-	{
-		info("- deleting old data for $release\n");
+	unless ($disable_indexing) {
+		index_release($releases->{$release}, 0);
+	}
+
+	if ($clear_db) {
 		delete_release($releases->{$release});
 	}
 
-	unless ($disable_indexing)
-	{
-		info("- indexing $release\n");
-		index_release($releases->{$release}, 0);
-		sleep($pause);
-	}
+	post_release($releases->{$release});
 
-	unless ($disable_solr)
-	{
-		info("- clearing $release from solr\n");
-		clear_release_from_solr($releases->{$release});
-		sleep($pause);
-		commit_solr();
-		sleep($pause);
-	}
-
-	unless ($disable_solr)
-	{
-		info("- posting $release to solr\n");
-		post_release_to_solr($releases->{$release});
-		sleep($pause);
-	}
-
-	unless ($disable_delete or $clear_db)
-	{
-		info("- removing obsolete $release files\n");
+	if ($backend eq 'solr' and (not $disable_delete or not $clear_db)) {
 		remove_obsolete_entries($releases->{$release});
-		sleep($pause);
 	}
 
-	unless ($disable_solr)
-	{
+	if ($backend eq 'solr' and not $disable_solr) {
 		commit_solr();
 	}
 
-	if ($release eq $end_at)
-	{
+	if ($release eq $end_at) {
 		trace("- $release = $end_at\n");
 		last;
-	}
-	else
-	{
+	} else {
 		if ($end_at ne "") {
 			trace("- $release != $end_at\n");
 		}
 	}
 }
 
-unless ($disable_solr) {
-	optimize_solr();
-}
+optimize();
 
-unless ($disable_local_solr) {
+if ($backend eq 'solr' and not $disable_local_solr) {
 	my $proc = Proc::ProcessTable->new(enable_ttys => 0);
 
 	# first, kill the newly-indexed Solr
@@ -359,6 +379,8 @@ sub check_out_release
 {
 	my $release = shift;
 	my $release_id = $release->{'id'};
+
+	info("- checking out $release_id\n");
 
 	my $tag = get_tag_name($release->{'version'});
 	my $checkoutroot = get_basepath($release) . '/fink';
@@ -455,13 +477,19 @@ sub check_out_release
 			}
 		}
 	}
+
+	sleep($pause);
 }
 
 sub index_release
 {
 	my $release = shift;
-	my $post_immediately = shift || 0;
 	my $release_id = $release->{'id'};
+
+	info("- indexing $release_id\n");
+
+	$pkgs = {};
+	my $post_immediately = shift || 0;
 
 	my $tree = $release->{'type'};
 	$tree = 'stable' if ($tree eq 'bindist');
@@ -689,35 +717,39 @@ sub index_release
 		my $pkg_id = package_id($package_info);
 		my $doc_id = $release->{'id'} . '-' . $pkg_id;
 
-		if ($post_immediately) {
-			$solr->add( { $doc_id => $package_info } );
-			return;
-		}
-
-		my $outputfile = $xmlpath . '/' . package_id($package_info) . '.xml';
-		my $xml;
-
-		my $writer = XML::Writer->new(OUTPUT => \$xml, UNSAFE => 1);
-
-		# alternate schema, solr
-		$writer->startTag("doc");
-
-		$writer->cdataElement("field", $pkg_id, "name" => "pkg_id");
-		$writer->cdataElement("field", $doc_id, "name" => "doc_id");
-
-		for my $key (keys %$package_info)
-		{
-			if (exists $package_info->{$key} and defined $package_info->{$key})
-			{
-				$writer->cdataElement("field", $package_info->{$key}, "name" => $key);
+		if ($backend eq 'solr') {
+			if ($post_immediately) {
+				$solr->add( { $doc_id => $package_info } );
+				return;
 			}
+
+			my $outputfile = $xmlpath . '/' . package_id($package_info) . '.xml';
+			my $xml;
+
+			my $writer = XML::Writer->new(OUTPUT => \$xml, UNSAFE => 1);
+
+			# alternate schema, solr
+			$writer->startTag("doc");
+
+			$writer->cdataElement("field", $pkg_id, "name" => "pkg_id");
+			$writer->cdataElement("field", $doc_id, "name" => "doc_id");
+
+			for my $key (keys %$package_info)
+			{
+				if (exists $package_info->{$key} and defined $package_info->{$key})
+				{
+					$writer->cdataElement("field", $package_info->{$key}, "name" => $key);
+				}
+			}
+
+			$writer->endTag("doc");
+
+			$writer->end();
+
+			write_file( $outputfile, {binmode => ':utf8'}, $xml );
+		} elsif ($backend eq 'sql') {
+			$pkgs->{$doc_id} = $package_info;
 		}
-
-		$writer->endTag("doc");
-
-		$writer->end();
-
-		write_file( $outputfile, {binmode => ':utf8'}, $xml );
 	}
 }
 
@@ -758,13 +790,6 @@ sub filter_description
 	return join("\n", @desc);
 }
 
-sub clear_release_from_solr
-{
-	my $release = shift;
-
-	do_clear($release);
-}
-
 sub post_release_to_solr
 {
 	my $release = shift;
@@ -803,6 +828,8 @@ sub remove_obsolete_entries
 {
 	my $release = shift;
 	my $release_id = $release->{'id'};
+
+	info("- removing obsolete $release_id files\n");
 
 	my $xmlpath = get_xmlpath($release);
 	my $basepath = get_basepath($release);
@@ -913,6 +940,10 @@ sub package_id
 {
 	my $package = shift;
 
+	if (not $package) {
+		return '';
+	}
+
 	my $id = $package->{'name'};
 	if ($package->{'epoch'})
 	{
@@ -997,32 +1028,38 @@ sub get_deb_archive
 	return '';
 }
 
-sub do_clear
-{
-	my $release = shift;
-	my $retries = 3;
-	my $retval;
-	while ($retries-- > 0) {
-		$retval = delete_release($release);
-		if ($retval) {
-			return 1
-		}
-	}
-	die "failed to delete '".$release->{'id'}."' after retries";
-}
-
 sub do_post
 {
 	my $data = shift;
 	my $retries = 3;
 	my $retval;
+	my $failmsg = '';
 	while ($retries-- > 0) {
-		$retval = post_to_solr($data);
+		if ($backend eq 'solr') {
+			$retval = post_to_solr($data);
+		} elsif ($backend eq 'sql') {
+			$retval = post_to_sql($data);
+			if (not $retval) {
+				$failmsg = " (" . $db->errstr . ")";
+			}
+		}
 		if ($retval) {
 			return 1
 		}
 	}
-	die "failed to post after retries";
+
+	die "failed to post after retries" . $failmsg;
+}
+
+sub post_to_sql
+{
+	my $data = shift;
+
+	my $st = $db->prepare($data);
+	$st->execute() || return 0;
+	$st->finish();
+
+	return 1;
 }
 
 sub post_to_solr
@@ -1040,34 +1077,235 @@ sub post_to_solr
 		$req->content($data);
 	}
 
+	sleep($pause);
+
 	my $response = $ua->request($req);
 	if ($response->is_error())
 	{
 		info("failed to post update: " . $response->status_line() . "\n\nresponse content was:\n" . $response->content . "\n\nrequest content was:\n" . $req->content);
 		return 0;
 	}
-	return 1;
-}
 
-sub delete_all
-{
-	post_to_solr('<delete><query>*:*</query></delete>') || die "unable to run delete query";
+	return 1;
 }
 
 sub delete_release
 {
 	my $release = shift;
-	post_to_solr("<delete><query>+rel_id:$release->{'id'}</query></delete>") || die "unable to run delete query for $release";
+	my $release_id = $release->{'id'};
+
+	if ($backend eq 'solr' and $disable_solr) {
+		return;
+	}
+
+	info("- deleting old data for $release_id\n");
+
+	if ($backend eq 'solr') {
+		delete_release_from_solr($release);
+	} elsif ($backend eq 'sql') {
+		delete_release_from_sql($release);
+	}
+}
+
+sub post_release
+{
+	my $release = shift;
+	my $release_id = $release->{'id'};
+
+	info("- posting $release_id to $backend\n");
+
+	if ($backend eq 'solr') {
+		post_release_to_solr($release);
+	} elsif ($backend eq 'sql') {
+		post_release_to_sql($release);
+	}
+}
+
+sub optimize_sql
+{
+	post_to_sql('OPTIMIZE TABLE `pdb`') || die "unable to optimize (" . $db->errstr . ")";
+}
+
+sub create_sql_table
+{
+	info("- checking table\n");
+
+	post_to_sql("CREATE TABLE IF NOT EXISTS `pdb` (
+ `name` varchar(60) NOT NULL,
+ `sort_version` varchar(40) NOT NULL,
+ `version` varchar(20) NOT NULL,
+ `revision` varchar(20) NOT NULL,
+ `epoch` smallint(6) DEFAULT NULL,
+ `descshort` varchar(90) NOT NULL,
+ `desclong` text,
+ `descusage` text,
+ `maintainer` varchar(250) NOT NULL,
+ `depends` text,
+ `builddepends` text,
+ `license` varchar(40) DEFAULT NULL,
+ `homepage` varchar(250) DEFAULT NULL,
+ `section` varchar(40) NOT NULL,
+ `parentname` varchar(60) DEFAULT NULL,
+ `infofile` varchar(400) NOT NULL,
+ `debarchive` varchar(400) DEFAULT NULL,
+ `rcspath` varchar(400) NOT NULL,
+ `tag` varchar(400) DEFAULT NULL,
+ `infofilechanged` datetime NOT NULL,
+ `dist_id` varchar(20) NOT NULL,
+ `dist_name` varchar(20) NOT NULL,
+ `dist_architecture` varchar(20) NOT NULL,
+ `dist_description` varchar(80) NOT NULL,
+ `dist_priority` smallint(6) NOT NULL,
+ `dist_active` tinyint(4) NOT NULL DEFAULT '0',
+ `dist_visible` tinyint(4) NOT NULL DEFAULT '0',
+ `dist_supported` tinyint(4) NOT NULL DEFAULT '0',
+ `rel_id` varchar(40) NOT NULL,
+ `rel_type` varchar(20) NOT NULL,
+ `rel_version` varchar(20) NOT NULL,
+ `rel_priority` smallint(6) NOT NULL,
+ `rel_active` tinyint(4) NOT NULL DEFAULT '0',
+ `has_parent` tinyint(4) NOT NULL DEFAULT '0',
+ `has_common_splitoffs` tinyint(4) NOT NULL DEFAULT '0',
+ `is_common_splitoff` tinyint(4) NOT NULL DEFAULT '0',
+ UNIQUE KEY `unique_pkg` (`rel_id`,`name`),
+ KEY `arch` (`dist_architecture`),
+ KEY `dist` (`dist_name`),
+ KEY `maintainer` (`maintainer`),
+ KEY `name` (`name`),
+ KEY `section` (`section`),
+ KEY `tree` (`rel_type`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8") || die "unable to create table (" . $db->errstr . ")";
+}
+
+sub delete_all_from_solr
+{
+	post_to_solr('<delete><query>*:*</query></delete>') || die "unable to run delete query";
+}
+
+sub delete_all_from_sql
+{
+	post_to_sql('DROP TABLE IF EXISTS `pdb`') || die "unable to run drop query (" . $db->errstr . ")";
+}
+
+sub delete_release_from_sql
+{
+	my $release = shift;
+	my $release_id = $release->{'id'};
+
+	my $text = "DELETE FROM `pdb` WHERE `rel_id` = '" . $release_id . "'";
+
+	post_to_sql($text) || die "unable to run delete query (" . $db->errstr . ")";
+}
+
+sub post_release_to_sql
+{
+	my $release = shift;
+	my $release_id = $release->{'id'};
+
+	while (my ($key, $value) = each(%$pkgs)) {
+		my $text = "INSERT INTO `pdb` SET
+`name` = '" . $value->{'name'} . "',
+`sort_version` = '" . $value->{'sort_version'} . "',
+`version` = '" . $value->{'version'} . "',
+`revision` = '" . $value->{'revision'} . "',
+`epoch` = " . $value->{'epoch'} . ",
+`descshort` = " . $db->quote($value->{'descshort'}) . ",
+`desclong` = " . $db->quote($value->{'desclong'}) . ",
+`descusage` = " . $db->quote($value->{'descusage'}) . ",
+`maintainer` = " . $db->quote($value->{'maintainer'}) . ",
+`depends` = '" . $value->{'depends'} . "',
+`builddepends` = '" . $value->{'builddepends'} . "',
+`license` = " . $db->quote($value->{'license'}) . ",
+`homepage` = " . $db->quote($value->{'homepage'}) . ",
+`section` = '" . $value->{'section'} . "',
+`parentname` = '" . $value->{'parentname'} . "',
+`infofile` = '" . $value->{'infofile'} . "',
+`debarchive` = '" . $value->{'debarchive'} . "',
+`rcspath` = '" . $value->{'rcspath'} . "',
+`tag` = '" . $value->{'tag'} . "',
+`infofilechanged` = '" . $value->{'infofilechanged'} . "',
+`dist_id` = '" . $value->{'dist_id'} . "',
+`dist_name` = '" . $value->{'dist_name'} . "',
+`dist_architecture` = '" . $value->{'dist_architecture'} . "',
+`dist_description` = '" . $value->{'dist_description'} . "',
+`dist_priority` = " . $value->{'dist_priority'} . ",
+`dist_active` = " . (($value->{'dist_active'}) ? 1 : 0) . ",
+`dist_visible` = " . (($value->{'dist_visible'}) ? 1 : 0) . ",
+`dist_supported` = " . (($value->{'dist_supported'}) ? 1 : 0) . ",
+`rel_id` = '" . $value->{'rel_id'} . "',
+`rel_type` = '" . $value->{'rel_type'} . "',
+`rel_version` = '" . $value->{'rel_version'} . "',
+`rel_priority` = " . $value->{'rel_priority'} . ",
+`rel_active` = " . (($value->{'rel_active'}) ? 1 : 0) . ",
+`has_parent` = " . (($value->{'has_parent'}) ? 1 : 0) . ",
+`has_common_splitoffs` = " . (($value->{'has_common_splitoffs'}) ? 1 : 0) . ",
+`is_common_splitoff` = " . (($value->{'is_common_splitoff'}) ? 1 : 0) . "
+ON DUPLICATE KEY UPDATE
+`sort_version` = '" . $value->{'sort_version'} . "',
+`version` = '" . $value->{'version'} . "',
+`revision` = '" . $value->{'revision'} . "',
+`epoch` = " . $value->{'epoch'} . ",
+`descshort` = " . $db->quote($value->{'descshort'}) . ",
+`desclong` = " . $db->quote($value->{'desclong'}) . ",
+`descusage` = " . $db->quote($value->{'descusage'}) . ",
+`maintainer` = " . $db->quote($value->{'maintainer'}) . ",
+`depends` = '" . $value->{'depends'} . "',
+`builddepends` = '" . $value->{'builddepends'} . "',
+`license` = " . $db->quote($value->{'license'}) . ",
+`homepage` = " . $db->quote($value->{'homepage'}) . ",
+`section` = '" . $value->{'section'} . "',
+`parentname` = '" . $value->{'parentname'} . "',
+`infofile` = '" . $value->{'infofile'} . "',
+`debarchive` = '" . $value->{'debarchive'} . "',
+`rcspath` = '" . $value->{'rcspath'} . "',
+`tag` = '" . $value->{'tag'} . "',
+`infofilechanged` = '" . $value->{'infofilechanged'} . "',
+`dist_id` = '" . $value->{'dist_id'} . "',
+`dist_name` = '" . $value->{'dist_name'} . "',
+`dist_architecture` = '" . $value->{'dist_architecture'} . "',
+`dist_description` = '" . $value->{'dist_description'} . "',
+`dist_priority` = " . $value->{'dist_priority'} . ",
+`dist_active` = " . (($value->{'dist_active'}) ? 1 : 0) . ",
+`dist_visible` = " . (($value->{'dist_visible'}) ? 1 : 0) . ",
+`dist_supported` = " . (($value->{'dist_supported'}) ? 1 : 0) . ",
+`rel_type` = '" . $value->{'rel_type'} . "',
+`rel_version` = '" . $value->{'rel_version'} . "',
+`rel_priority` = " . $value->{'rel_priority'} . ",
+`rel_active` = " . (($value->{'rel_active'}) ? 1 : 0) . ",
+`has_parent` = " . (($value->{'has_parent'}) ? 1 : 0) . ",
+`has_common_splitoffs` = " . (($value->{'has_common_splitoffs'}) ? 1 : 0) . ",
+`is_common_splitoff` = " . (($value->{'is_common_splitoff'}) ? 1 : 0);
+
+		do_post($text);
+	}
+}
+
+sub optimize
+{
+	if ($backend eq 'solr') {
+		optimize_solr();
+	} elsif ($backend eq 'sql') {
+		optimize_sql();
+	}
 }
 
 sub optimize_solr
 {
-	post_to_solr('<optimize/>') || die "unable to optimize";
+	unless ($disable_solr) {
+		post_to_solr('<optimize/>') || die "unable to optimize";
+	}
 }
 
 sub commit_solr
 {
 	post_to_solr('<commit/>') || die "unable to commit";
+}
+
+sub delete_release_from_solr
+{
+	my $release = shift;
+
+	post_to_solr("<delete><query>+rel_id:$release->{'id'}</query></delete>") || die "unable to run delete query for $release";
 }
 
 sub get_packages_from_solr
@@ -1162,6 +1400,14 @@ Options:
 	--pause=<seconds>    pause for X seconds between phases (default: 60)
 	--start-at=<foo>     start at the given release ID
 	--end-at=<foo>       end at the given release ID
+
+	--backend=<dbtype>   type of backend (solr or sql, default: solr)
+
+	--sqlhost=<host>     SQL host (default: localhost)
+	--sqlpost=<port>     SQL port (default: 3306)
+	--sqldb=<dbname>     SQL DB name (default: pdb)
+	--sqluser=<user>     SQL user (default: pdb)
+	--sqlpass=<pass>     SQL pass (default: none)
 
 EOMSG
 }
