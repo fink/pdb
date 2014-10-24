@@ -102,6 +102,7 @@ use vars qw(
 	$sql_pass
 
 	$clear_db
+	$clear_rel
 	$keep_temporary
 	$disable_cvs
 	$disable_indexing
@@ -139,7 +140,8 @@ $sql_user       = 'pdb';
 $sql_pass       = '';
 
 $keep_temporary     = 0;
-$clear_db           = 1;
+$clear_db           = 0;
+$clear_rel          = 1;
 $disable_cvs        = 0;
 $disable_indexing   = 0;
 $disable_solr       = 0;
@@ -169,6 +171,7 @@ GetOptions(
 	'port=s',            => \$solr_temp_port,
 
 	'clear-db'           => \$clear_db,
+	'clear-rel'          => \$clear_rel,
 	'keep-temporary'     => \$keep_temporary,
 	'disable-cvs'        => \$disable_cvs,
 	'disable-indexing'   => \$disable_indexing,
@@ -290,6 +293,10 @@ unless ($disable_local_solr) {
 	sleep(5);
 }
 
+if ($clear_db) {
+	delete_all();
+}
+
 if ($backend eq 'sql') {
 	create_sql_table();
 }
@@ -314,13 +321,13 @@ for my $release (reverse sort keys %$releases)
 		index_release($releases->{$release}, 0);
 	}
 
-	if ($clear_db) {
+	if ($clear_rel) {
 		delete_release($releases->{$release});
 	}
 
 	post_release($releases->{$release});
 
-	if ($backend eq 'solr' and (not $disable_delete or not $clear_db)) {
+	if ($backend eq 'solr' and (not $disable_delete or not $clear_rel)) {
 		remove_obsolete_entries($releases->{$release});
 	}
 
@@ -748,6 +755,9 @@ sub index_release
 
 			write_file( $outputfile, {binmode => ':utf8'}, $xml );
 		} elsif ($backend eq 'sql') {
+			$package_info->{'doc_id'} = $doc_id;
+			$package_info->{'pkg_id'} = $pkg_id;
+
 			$pkgs->{$doc_id} = $package_info;
 		}
 	}
@@ -1128,9 +1138,11 @@ sub optimize_sql
 
 sub create_sql_table
 {
-	info("- checking table\n");
+	info("- create table structure\n");
 
 	post_to_sql("CREATE TABLE IF NOT EXISTS `pdb` (
+ `doc_id` varchar(60) NOT NULL,
+ `pkg_id` varchar(60) NOT NULL,
  `name` varchar(60) NOT NULL,
  `sort_version` varchar(40) NOT NULL,
  `version` varchar(20) NOT NULL,
@@ -1167,14 +1179,33 @@ sub create_sql_table
  `has_parent` tinyint(4) NOT NULL DEFAULT '0',
  `has_common_splitoffs` tinyint(4) NOT NULL DEFAULT '0',
  `is_common_splitoff` tinyint(4) NOT NULL DEFAULT '0',
+ `name_e` varchar(60) NOT NULL,
+ `parentname_e` varchar(60) NOT NULL,
+ `version_e` varchar(20) NOT NULL,
+ `revision_e` varchar(20) NOT NULL,
  UNIQUE KEY `unique_pkg` (`rel_id`,`name`),
  KEY `arch` (`dist_architecture`),
  KEY `dist` (`dist_name`),
+ KEY `dist_id` (`dist_id`),
+ KEY `doc_id` (`doc_id`),
  KEY `maintainer` (`maintainer`),
  KEY `name` (`name`),
+ KEY `pkg_id` (`pkg_id`),
+ KEY `rel_id` (`rel_id`),
  KEY `section` (`section`),
  KEY `tree` (`rel_type`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8") || die "unable to create table (" . $db->errstr . ")";
+}
+
+sub delete_all
+{
+	info('- removing entire db');
+
+	if ($backend eq 'solr') {
+		delete_all_from_solr();
+	} elsif ($backend eq 'sql') {
+		delete_all_from_sql();
+	}
 }
 
 sub delete_all_from_solr
@@ -1202,8 +1233,47 @@ sub post_release_to_sql
 	my $release = shift;
 	my $release_id = $release->{'id'};
 
+	my $dist_active;
+	my $dist_visible;
+	my $dist_supported;
+	my $rel_active;
+	my $has_parent;
+	my $has_common_splitoffs;
+	my $is_common_splitoff;
+
 	while (my ($key, $value) = each(%$pkgs)) {
+		$dist_active = 0;
+		if ($value->{'dist_active'} eq 'true') {
+			$dist_active = 1;
+		}
+		$dist_visible = 0;
+		if ($value->{'dist_visible'} eq 'true') {
+			$dist_visible = 1;
+		}
+		$dist_supported = 0;
+		if ($value->{'dist_supported'} eq 'true') {
+			$dist_supported = 1;
+		}
+		$rel_active = 0;
+		if ($value->{'rel_active'} eq 'true') {
+			$rel_active = 1;
+		}
+		$has_parent = 0;
+		if ($value->{'has_parent'} eq 'true') {
+			$has_parent = 1;
+		}
+		$has_common_splitoffs = 0;
+		if ($value->{'has_common_splitoffs'} eq 'true') {
+			$has_common_splitoffs = 1;
+		}
+		$is_common_splitoff = 0;
+		if ($value->{'is_common_splitoff'} eq 'true') {
+			$is_common_splitoff = 1;
+		}
+
 		my $text = "INSERT INTO `pdb` SET
+`doc_id` = '" . $value->{'doc_id'} . "',
+`pkg_id` = '" . $value->{'pkg_id'} . "',
 `name` = '" . $value->{'name'} . "',
 `sort_version` = '" . $value->{'sort_version'} . "',
 `version` = '" . $value->{'version'} . "',
@@ -1229,17 +1299,21 @@ sub post_release_to_sql
 `dist_architecture` = '" . $value->{'dist_architecture'} . "',
 `dist_description` = '" . $value->{'dist_description'} . "',
 `dist_priority` = " . $value->{'dist_priority'} . ",
-`dist_active` = " . (($value->{'dist_active'}) ? 1 : 0) . ",
-`dist_visible` = " . (($value->{'dist_visible'}) ? 1 : 0) . ",
-`dist_supported` = " . (($value->{'dist_supported'}) ? 1 : 0) . ",
+`dist_active` = " . $dist_active . ",
+`dist_visible` = " . $dist_visible . ",
+`dist_supported` = " . $dist_supported . ",
 `rel_id` = '" . $value->{'rel_id'} . "',
 `rel_type` = '" . $value->{'rel_type'} . "',
 `rel_version` = '" . $value->{'rel_version'} . "',
 `rel_priority` = " . $value->{'rel_priority'} . ",
-`rel_active` = " . (($value->{'rel_active'}) ? 1 : 0) . ",
-`has_parent` = " . (($value->{'has_parent'}) ? 1 : 0) . ",
-`has_common_splitoffs` = " . (($value->{'has_common_splitoffs'}) ? 1 : 0) . ",
-`is_common_splitoff` = " . (($value->{'is_common_splitoff'}) ? 1 : 0) . "
+`rel_active` = " . $rel_active . ",
+`has_parent` = " . $has_parent . ",
+`has_common_splitoffs` = " . $has_common_splitoffs . ",
+`is_common_splitoff` = " . $is_common_splitoff . ",
+`name_e` = '" . $value->{'name'} . "',
+`parentname_e` = '" . $value->{'parentname'} . "',
+`version_e` = '" . $value->{'version'} . "',
+`revision_e` = '" . $value->{'revision'} . "'
 ON DUPLICATE KEY UPDATE
 `sort_version` = '" . $value->{'sort_version'} . "',
 `version` = '" . $value->{'version'} . "',
@@ -1265,16 +1339,20 @@ ON DUPLICATE KEY UPDATE
 `dist_architecture` = '" . $value->{'dist_architecture'} . "',
 `dist_description` = '" . $value->{'dist_description'} . "',
 `dist_priority` = " . $value->{'dist_priority'} . ",
-`dist_active` = " . (($value->{'dist_active'}) ? 1 : 0) . ",
-`dist_visible` = " . (($value->{'dist_visible'}) ? 1 : 0) . ",
-`dist_supported` = " . (($value->{'dist_supported'}) ? 1 : 0) . ",
+`dist_active` = " . $dist_active . ",
+`dist_visible` = " . $dist_visible . ",
+`dist_supported` = " . $dist_supported . ",
 `rel_type` = '" . $value->{'rel_type'} . "',
 `rel_version` = '" . $value->{'rel_version'} . "',
 `rel_priority` = " . $value->{'rel_priority'} . ",
-`rel_active` = " . (($value->{'rel_active'}) ? 1 : 0) . ",
-`has_parent` = " . (($value->{'has_parent'}) ? 1 : 0) . ",
-`has_common_splitoffs` = " . (($value->{'has_common_splitoffs'}) ? 1 : 0) . ",
-`is_common_splitoff` = " . (($value->{'is_common_splitoff'}) ? 1 : 0);
+`rel_active` = " . $rel_active . ",
+`has_parent` = " . $has_parent . ",
+`has_common_splitoffs` = " . $has_common_splitoffs . ",
+`is_common_splitoff` = " . $is_common_splitoff . ",
+`name_e` = '" . $value->{'name'} . "',
+`parentname_e` = '" . $value->{'parentname'} . "',
+`version_e` = '" . $value->{'version'} . "',
+`revision_e` = '" . $value->{'revision'} . "'";
 
 		do_post($text);
 	}
@@ -1385,7 +1463,8 @@ Options:
 	--tempdir=<path>     where to put temporary files
 	--xmldir=<path>      where to write the .xml files
 
-	--clear-db           delete existing index before doing anything
+	--clear-db           remove entire db before starting
+	--clear-rel          delete existing index before doing anything
 	--keep-temporary     keep the temporary solr instance running after import
 	--disable-cvs        don't check out .info files
 	--disable-indexing   don't index .info files to .xml files
