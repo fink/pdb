@@ -1069,7 +1069,7 @@ sub post_to_sql
 	$st->execute() || return 0;
 	$st->finish();
 
-	#sleep($pause);
+	sleep($pause);
 
 	return 1;
 }
