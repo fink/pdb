@@ -648,6 +648,7 @@ sub index_release
 			my $numeric_version = $packageobj->get_version();
 			$numeric_version =~ s/[^0-9\.]//gs;
 			my $multiplier = 1;
+			my $vcount = 0;
 			for my $field (reverse(split(/\./, $numeric_version)))
 			{
 				my $value = Math::BigInt->bzero();
@@ -655,6 +656,12 @@ sub index_release
 				$value->bmul($multiplier);
 				$sort_value->badd($value);
 				$multiplier *= 10000;
+				$vcount++;
+			}
+
+			for (my $i = 0; $vcount < 10; $vcount++)
+			{
+				$sort_value *= 10;
 			}
 
 			$sort_value = $sort_value->bstr();
