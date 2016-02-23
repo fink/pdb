@@ -666,9 +666,9 @@ sub index_release
 				}
 			}
 
-			for (my $i = 0; $vcount < 10; $vcount++)
+			for (my $i = 0; $vcount < 6; $vcount++)
 			{
-				$sort_value *= 10;
+				$sort_value *= 1000;
 			}
 
 			my $numeric_revision = $packageobj->get_revision();
