@@ -1032,7 +1032,7 @@ sub get_deb_archive
 	my $system = 'darwin';
 	my $tree = 'main';
 
-	if ($release->{'distribution'}->{'rcspath'} =~ /dists\/10.[0-9]\/$dist\/(.+)\/finkinfo\/.+\/.+\.info$/i) {
+	if ($release->{'distribution'}->{'rcspath'} =~ /dists\/10.[0-9]+\/$dist\/(.+)\/finkinfo\/.+\/.+\.info$/i) {
 		$tree = $1;
 	}
 
