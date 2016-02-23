@@ -643,29 +643,33 @@ sub index_release
 			}
 		}
 
-		my $sort_value = Math::BigInt->bzero();
+		my $sort_value;
 		{
 			my $numeric_version = $packageobj->get_version();
 			$numeric_version =~ s/[^0-9\.]//gs;
 			my $multiplier = 1;
 			my $vcount = 0;
-			for my $field (reverse(split(/\./, $numeric_version)))
+			my $vprf = 0;
+			for my $field (split(/\./, $numeric_version))
 			{
 				$field =~ s/^.*(...)$/$1/ if (length($field) > 3);
-				my $value = Math::BigInt->bzero();
-				$value->badd($field);
-				$value->bmul($multiplier);
-				$sort_value->badd($value);
-				$multiplier *= 10000;
+				$sort_value .= sprintf("%03d", $field);
 				$vcount++;
+
+				if ($vprf == 0 && $sort_value > 0)
+				{
+					$vprf = 1;
+					while (1 > $sort_value/100)
+					{
+						$sort_value *= 10;
+					}
+				}
 			}
 
 			for (my $i = 0; $vcount < 10; $vcount++)
 			{
 				$sort_value *= 10;
 			}
-
-			$sort_value = $sort_value->bstr();
 
 			my $numeric_revision = $packageobj->get_revision();
 			$numeric_revision =~ s/[^0-9]//gs;
