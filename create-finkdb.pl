@@ -563,6 +563,7 @@ sub index_release
 
 	trace($release->{'id'} . " trees = " . $config->param("trees"), "\n");
 
+	### FIXME, only keep unique packnames (highest version wins)
 	### loop over packages
 
 	my ($packageobj);
