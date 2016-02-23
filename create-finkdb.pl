@@ -651,6 +651,7 @@ sub index_release
 			my $vcount = 0;
 			for my $field (reverse(split(/\./, $numeric_version)))
 			{
+				$field =~ s/^.*(...)$/$1/ if (length($field) > 3);
 				my $value = Math::BigInt->bzero();
 				$value->badd($field);
 				$value->bmul($multiplier);
