@@ -1,3 +1,9 @@
 .*.swp
 lucene-index
 work
+solr/logs/*.log
+solr/logs/*.bz2
+solr/logs/*.gz
+solr/solr/conf/nore
+solr/solr/data/*
+solr/work/Jetty_*
