@@ -1,13 +1,9 @@
 How to set up your own pdb instance:
 
 # check out the pdb code
-cvs -d :pserver:anonymous@fink.cvs.sourceforge.net:/cvsroot/fink co pdb
+git clone https://github.com/fink/pdb.git
 cd pdb
-
-# OBSOLETE update to the branch (just for now)
-#pushd web/pdb
-#cvs up -r pdb_solr
-#popd
+cvs -d :pserver:anonymous@fink.cvs.sourceforge.net:/cvsroot/fink co web
 
 # run solr
 cd solr
