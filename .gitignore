@@ -7,3 +7,5 @@ solr/logs/*.gz
 solr/solr/conf/nore
 solr/solr/data/*
 solr/work/Jetty_*
+web
+fink
