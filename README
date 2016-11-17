@@ -3,7 +3,8 @@ How to set up your own pdb instance:
 # check out the pdb code
 git clone https://github.com/fink/pdb.git
 cd pdb
-cvs -d :pserver:anonymous@fink.cvs.sourceforge.net:/cvsroot/fink co web
+git clone https://github.com/fink/fink.git fink
+git clone https://github.com/fink/website.git web
 
 # run solr
 cd solr
