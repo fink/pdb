@@ -10,6 +10,8 @@ if [ -x "/usr/bin/ionice" ]; then
 fi
 
 for dist in \
+	10.15-x86_64-current-stable \
+	10.14.5-x86_64-current-stable \
 	10.14-x86_64-current-stable \
 	10.13-x86_64-current-stable \
 	10.12-x86_64-current-stable \
